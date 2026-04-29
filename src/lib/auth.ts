@@ -16,9 +16,13 @@ export async function verifyCredentials(input: LoginInput): Promise<boolean> {
     throw new Error('Missing ADMIN_USER or ADMIN_PASSWORD_HASH environment configuration');
   }
 
-  if (input.username !== adminUser) {
+  const expectedUser = adminUser.trim();
+  const expectedHash = passwordHash.trim();
+  const providedUser = input.username.trim();
+
+  if (providedUser !== expectedUser) {
     return false;
   }
 
-  return await bcrypt.compare(input.password, passwordHash);
+  return await bcrypt.compare(input.password, expectedHash);
 }
