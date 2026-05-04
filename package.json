@@ -1,0 +1,35 @@
+{
+  "name": "shyy-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2",
+    "clsx": "^2.1.1",
+    "next": "^15.3.1",
+    "postgres": "^3.4.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.14",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.26.0",
+    "eslint-config-next": "^15.3.1",
+    "postcss": "^8.5.3",
+    "prisma": "^6.7.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  }
+}

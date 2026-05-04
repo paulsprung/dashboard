@@ -1,0 +1,69 @@
+generator client { provider = "prisma-client-js" }
+
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum Role { OWNER ADMIN USER READONLY }
+enum ChallengeType { REGISTRATION AUTHENTICATION }
+enum AuditStatus { SUCCESS FAILED }
+
+model User {
+  id          String    @id @default(cuid())
+  username    String    @unique
+  displayName String
+  role        Role      @default(USER)
+  disabled    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  passkeys    Passkey[]
+  sessions    Session[]
+  challenges  Challenge[]
+  auditLogs   AuditLog[]
+}
+
+model Passkey {
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String[]
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Challenge {
+  id        String        @id @default(cuid())
+  userId    String?
+  type      ChallengeType
+  challenge String
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    String
+  target    String?
+  status    AuditStatus
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
