@@ -263,8 +263,12 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
     } as Parameters<typeof verifyAuthenticationResponse>[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown verification error';
-    console.error('verify-authentication failed', { message, origin: getEffectiveOrigin(req), rpID: getEffectiveRPID(req, getEffectiveOrigin(req)) });
-    return res.status(400).json({ error: message });
+    const normalized = message.toLowerCase();
+    const hint = normalized.includes('user verification was required')
+      ? 'User verification is currently required. Use a passkey with Face ID/Touch ID/PIN verification or set REQUIRE_USER_VERIFICATION=false.'
+      : message;
+    console.error('verify-authentication failed', { message, origin: getEffectiveOrigin(req), rpID: getEffectiveRPID(req, getEffectiveOrigin(req)), requireUserVerification });
+    return res.status(400).json({ error: hint });
   }
 
   if (!verification.verified) {
