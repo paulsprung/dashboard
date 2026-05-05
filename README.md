@@ -47,6 +47,7 @@ Frontend läuft auf `http://localhost:5173`.
 - `RP_ID` (default `localhost`)
 - `RP_NAME` (default `SM Dashboard`)
 - `ORIGIN` (default `http://localhost:5173`)
+- `REQUIRE_USER_VERIFICATION` (`true` or `false`, default `false` for demo compatibility)
 
 
 ## Codespaces-Hinweis (wichtig für RP ID)

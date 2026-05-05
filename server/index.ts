@@ -28,6 +28,7 @@ app.use(express.json());
 
 const rpName = process.env.RP_NAME ?? 'SM Dashboard';
 const port = Number(process.env.PORT ?? 3001);
+const requireUserVerification = process.env.REQUIRE_USER_VERIFICATION === 'true';
 
 const sanitizeRPID = (value: string) => value.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
@@ -125,7 +126,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
       expectedChallenge: user.currentChallenge,
       expectedOrigin: getEffectiveOrigin(req),
       expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
-      requireUserVerification: true,
+      requireUserVerification,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
@@ -211,7 +212,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
       expectedOrigin: getEffectiveOrigin(req),
       expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
       authenticator,
-      requireUserVerification: true,
+      requireUserVerification,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown verification error';
