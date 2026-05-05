@@ -3,6 +3,16 @@ import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
 type Mode = 'password+passkey' | 'passkey-only';
 
+
+const readErrorMessage = async (response: Response, fallback: string) => {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export default function App() {
   const [mode, setMode] = useState<Mode>('password+passkey');
   const [email, setEmail] = useState('');
@@ -19,7 +29,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      if (!optionsResponse.ok) throw new Error('Failed to load registration options');
+      if (!optionsResponse.ok) throw new Error(await readErrorMessage(optionsResponse, 'Failed to load registration options'));
 
       const options = await optionsResponse.json();
       const registrationResponse = await startRegistration({ optionsJSON: options });
@@ -29,7 +39,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, registrationResponse }),
       });
-      if (!verifyResponse.ok) throw new Error('Passkey registration failed');
+      if (!verifyResponse.ok) throw new Error(await readErrorMessage(verifyResponse, 'Passkey registration failed'));
 
       setStatus('✅ Passkey registered. You can now sign in.');
     } catch (error) {
@@ -51,7 +61,7 @@ export default function App() {
       });
 
       if (!challengeResponse.ok) {
-        throw new Error('Failed to load authentication options');
+        throw new Error(await readErrorMessage(challengeResponse, 'Failed to load authentication options'));
       }
 
       const options = await challengeResponse.json();
@@ -64,7 +74,7 @@ export default function App() {
       });
 
       if (!verifyResponse.ok) {
-        throw new Error('Passkey verification failed');
+        throw new Error(await readErrorMessage(verifyResponse, 'Passkey verification failed'));
       }
 
       setStatus('✅ Login successful. Dashboard access granted.');

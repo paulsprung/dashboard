@@ -129,6 +129,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
+    console.error('verify-registration failed', { message, origin: getEffectiveOrigin(req), rpID: getEffectiveRPID(req, getEffectiveOrigin(req)) });
     return res.status(400).json({ error: message });
   }
 
@@ -214,6 +215,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown verification error';
+    console.error('verify-authentication failed', { message, origin: getEffectiveOrigin(req), rpID: getEffectiveRPID(req, getEffectiveOrigin(req)) });
     return res.status(400).json({ error: message });
   }
 
