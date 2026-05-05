@@ -148,7 +148,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
     user.authenticators.push({
       credentialID: credential.id,
       credentialPublicKey: credential.publicKey,
-      counter: credential.counter,
+      counter: credential.counter ?? 0,
       transports: registrationResponse.response.transports,
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
@@ -203,6 +203,11 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
     return res.status(400).json({ error: 'Authenticator not registered for this user' });
   }
 
+  const authenticatorForVerification = {
+    ...authenticator,
+    counter: authenticator.counter ?? 0,
+  };
+
   let verification: VerifiedAuthenticationResponse;
   try {
     verification = await verifyAuthenticationResponse({
@@ -210,7 +215,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
       expectedChallenge: user.currentChallenge,
       expectedOrigin: getEffectiveOrigin(req),
       expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
-      authenticator,
+      authenticator: authenticatorForVerification,
       requireUserVerification,
     });
   } catch (error) {
