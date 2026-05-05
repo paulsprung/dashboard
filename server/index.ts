@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import crypto, { webcrypto } from 'node:crypto';
+import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -28,6 +30,12 @@ const rpName = process.env.RP_NAME ?? 'SM Dashboard';
 const port = Number(process.env.PORT ?? 3001);
 const sessionCookieName = 'sm_session';
 const requireUserVerification = process.env.REQUIRE_USER_VERIFICATION === 'true';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distDir = path.resolve(__dirname, '../dist');
+
 
 const sanitizeRPID = (value: string) => value.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
@@ -289,6 +297,13 @@ app.post('/api/auth/logout', (req, res) => {
   if (token) sessions.delete(token);
   res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
   return res.json({ ok: true });
+});
+
+app.use(express.static(distDir));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  return res.sendFile(path.join(distDir, 'index.html'));
 });
 
 app.get('/api/auth/health', (req, res) => {
