@@ -14,6 +14,7 @@ import type {
   AuthenticationResponseJSON,
   AuthenticatorDevice,
   AuthenticatorTransportFuture,
+  Base64URLString,
   RegistrationResponseJSON,
 } from '@simplewebauthn/typescript-types';
 
@@ -46,7 +47,7 @@ const getEffectiveRPID = (req: express.Request, originValue: string): string => 
 };
 
 type StoredAuthenticator = {
-  credentialID: Uint8Array;
+  credentialID: Base64URLString;
   credentialPublicKey: Uint8Array;
   counter: number;
   transports?: AuthenticatorTransportFuture[];
@@ -140,14 +141,14 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
   const alreadyRegistered = user.authenticators.some(
-    (item) => Buffer.from(item.credentialID).toString('base64url') === credential.id,
+    (item) => item.credentialID === credential.id,
   );
 
   if (!alreadyRegistered) {
     user.authenticators.push({
       credentialID: credential.id,
       credentialPublicKey: credential.publicKey,
-      counter: credential.counter,
+      counter: credential.counter ?? 0,
       transports: registrationResponse.response.transports,
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
@@ -187,9 +188,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   const body = req.body as AuthenticationResponseJSON;
 
   const user = [...usersByEmail.values()].find((candidate) =>
-    candidate.authenticators.some(
-      (authenticator) => Buffer.from(authenticator.credentialID).toString('base64url') === body.id,
-    ),
+    candidate.authenticators.some((authenticator) => authenticator.credentialID === body.id),
   );
 
   if (!user || !user.currentChallenge) {
@@ -197,12 +196,17 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   }
 
   const authenticator = user.authenticators.find(
-    (item) => Buffer.from(item.credentialID).toString('base64url') === body.id,
+    (item) => item.credentialID === body.id,
   );
 
   if (!authenticator) {
     return res.status(400).json({ error: 'Authenticator not registered for this user' });
   }
+
+  const authenticatorForVerification = {
+    ...authenticator,
+    counter: authenticator.counter ?? 0,
+  };
 
   let verification: VerifiedAuthenticationResponse;
   try {
@@ -211,7 +215,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
       expectedChallenge: user.currentChallenge,
       expectedOrigin: getEffectiveOrigin(req),
       expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
-      authenticator,
+      authenticator: authenticatorForVerification,
       requireUserVerification,
     });
   } catch (error) {
@@ -233,7 +237,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   });
 });
 
-app.get('/api/auth/health', (_req, res) => {
+app.get('/api/auth/health', (req, res) => {
   const effectiveOrigin = getEffectiveOrigin(req);
   const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
   res.json({ ok: true, rpID: effectiveRPID, rpName, origin: effectiveOrigin, message: 'Passkey auth server is running' });
