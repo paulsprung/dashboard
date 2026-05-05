@@ -204,8 +204,10 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   }
 
   const authenticatorForVerification = {
-    ...authenticator,
+    credentialID: authenticator.credentialID,
+    credentialPublicKey: authenticator.credentialPublicKey,
     counter: authenticator.counter ?? 0,
+    transports: authenticator.transports,
   };
 
   let verification: VerifiedAuthenticationResponse;
