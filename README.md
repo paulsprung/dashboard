@@ -37,3 +37,18 @@ Frontend läuft auf `http://localhost:5173`.
 - `RP_ID` (default `localhost`)
 - `RP_NAME` (default `SM Dashboard`)
 - `ORIGIN` (default `http://localhost:5173`)
+
+
+## Codespaces-Hinweis (wichtig für RP ID)
+In GitHub Codespaces ist `localhost` im Browser oft **nicht** die echte Origin-Domain.
+Wenn du den Fehler `RP ID "localhost" is invalid for this domain` bekommst, setze:
+
+```bash
+export ORIGIN="https://<dein-forwarded-url>"
+export RP_ID="<host-aus-deiner-forwarded-url-ohne-protokoll>"
+npm run server:dev
+```
+
+Beispiel: bei `https://fuzzy-space-xyz-5173.app.github.dev`
+- `ORIGIN=https://fuzzy-space-xyz-5173.app.github.dev`
+- `RP_ID=fuzzy-space-xyz-5173.app.github.dev`

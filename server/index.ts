@@ -20,9 +20,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const rpID = process.env.RP_ID ?? 'localhost';
 const rpName = process.env.RP_NAME ?? 'SM Dashboard';
 const origin = process.env.ORIGIN ?? 'http://localhost:5173';
+const rpID = process.env.RP_ID ?? new URL(origin).hostname;
 const port = Number(process.env.PORT ?? 3001);
 
 type StoredAuthenticator = {
