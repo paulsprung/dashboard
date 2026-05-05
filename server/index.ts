@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import crypto, { webcrypto } from 'node:crypto';
 import cors from 'cors';
 import express from 'express';
 import {
@@ -15,6 +15,11 @@ import type {
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
 } from '@simplewebauthn/typescript-types';
+
+
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto as Crypto;
+}
 
 const app = express();
 app.use(cors());
