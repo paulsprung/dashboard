@@ -35,7 +35,7 @@ type StoredAuthenticator = {
 };
 
 type UserRecord = {
-  id: string;
+  id: Uint8Array;
   email: string;
   currentChallenge?: string;
   authenticators: StoredAuthenticator[];
@@ -48,7 +48,7 @@ const getOrCreateUser = (email: string): UserRecord => {
   if (existing) return existing;
 
   const created: UserRecord = {
-    id: crypto.randomUUID(),
+    id: crypto.randomBytes(32),
     email,
     authenticators: [],
   };
@@ -201,7 +201,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
 
   return res.json({
     verified: true,
-    user: { id: user.id, email: user.email },
+    user: { id: Buffer.from(user.id).toString('base64url'), email: user.email },
   });
 });
 
