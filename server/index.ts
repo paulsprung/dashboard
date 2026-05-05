@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import crypto, { webcrypto } from 'node:crypto';
 import cors from 'cors';
 import express from 'express';
@@ -26,9 +27,22 @@ app.use(cors());
 app.use(express.json());
 
 const rpName = process.env.RP_NAME ?? 'SM Dashboard';
-const origin = process.env.ORIGIN ?? 'http://localhost:5173';
-const rpID = process.env.RP_ID ?? new URL(origin).hostname;
 const port = Number(process.env.PORT ?? 3001);
+
+const sanitizeRPID = (value: string) => value.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+const getEffectiveOrigin = (req: express.Request): string => {
+  if (process.env.ORIGIN) return process.env.ORIGIN;
+  const headerOrigin = req.headers.origin;
+  if (typeof headerOrigin === 'string' && headerOrigin.length > 0) return headerOrigin;
+  return 'http://localhost:5173';
+};
+
+const getEffectiveRPID = (req: express.Request, originValue: string): string => {
+  if (process.env.RP_ID) return sanitizeRPID(process.env.RP_ID.trim());
+  const host = new URL(originValue).hostname;
+  return sanitizeRPID(host);
+};
 
 type StoredAuthenticator = {
   credentialID: Uint8Array;
@@ -66,8 +80,11 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   const user = getOrCreateUser(email);
+  const effectiveOrigin = getEffectiveOrigin(req);
+  const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
+
   const options = await generateRegistrationOptions({
-    rpID,
+    rpID: effectiveRPID,
     rpName,
     userName: user.email,
     userID: user.id,
@@ -106,8 +123,8 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
     verification = await verifyRegistrationResponse({
       response: registrationResponse,
       expectedChallenge: user.currentChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
+      expectedOrigin: getEffectiveOrigin(req),
+      expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
       requireUserVerification: true,
     });
   } catch (error) {
@@ -148,8 +165,11 @@ app.post('/api/auth/passkey/authentication-options', async (req, res) => {
     return res.status(404).json({ error: 'No passkey found for this account yet. Register one first.' });
   }
 
+  const effectiveOrigin = getEffectiveOrigin(req);
+  const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
+
   const options = await generateAuthenticationOptions({
-    rpID,
+    rpID: effectiveRPID,
     allowCredentials: user.authenticators.map((authenticator) => ({
       id: authenticator.credentialID,
       transports: authenticator.transports,
@@ -187,8 +207,8 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
     verification = await verifyAuthenticationResponse({
       response: body,
       expectedChallenge: user.currentChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
+      expectedOrigin: getEffectiveOrigin(req),
+      expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
       authenticator,
       requireUserVerification: true,
     });
@@ -211,7 +231,9 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
 });
 
 app.get('/api/auth/health', (_req, res) => {
-  res.json({ ok: true, rpID, rpName, origin, message: 'Passkey auth server is running' });
+  const effectiveOrigin = getEffectiveOrigin(req);
+  const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
+  res.json({ ok: true, rpID: effectiveRPID, rpName, origin: effectiveOrigin, message: 'Passkey auth server is running' });
 });
 
 app.listen(port, () => {

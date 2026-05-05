@@ -10,6 +10,16 @@
 npm install
 ```
 
+## .env (optional, empfohlen)
+```env
+PORT=3001
+RP_NAME=SM Dashboard
+ORIGIN=https://<dein-forwarded-url>
+RP_ID=<nur-hostname-ohne-https-und-ohne-slash>
+```
+
+**Wichtig:** `RP_ID` darf **kein** `https://` und **keinen** abschließenden `/` enthalten.
+
 ## 2) Backend starten
 ```bash
 npm run server:dev
