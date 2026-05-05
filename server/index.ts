@@ -210,6 +210,13 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
     transports: authenticator.transports,
   };
 
+  const credentialForVerification = {
+    id: authenticator.credentialID,
+    publicKey: authenticator.credentialPublicKey,
+    counter: authenticator.counter ?? 0,
+    transports: authenticator.transports,
+  };
+
   let verification: VerifiedAuthenticationResponse;
   try {
     verification = await verifyAuthenticationResponse({
@@ -218,8 +225,9 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
       expectedOrigin: getEffectiveOrigin(req),
       expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
       authenticator: authenticatorForVerification,
+      credential: credentialForVerification,
       requireUserVerification,
-    });
+    } as Parameters<typeof verifyAuthenticationResponse>[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown verification error';
     console.error('verify-authentication failed', { message, origin: getEffectiveOrigin(req), rpID: getEffectiveRPID(req, getEffectiveOrigin(req)) });
