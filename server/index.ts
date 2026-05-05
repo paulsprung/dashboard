@@ -10,14 +10,11 @@ import {
   type VerifiedAuthenticationResponse,
   type VerifiedRegistrationResponse,
 } from '@simplewebauthn/server';
-import type {
-  AuthenticationResponseJSON,
-  AuthenticatorDevice,
-  AuthenticatorTransportFuture,
-  Base64URLString,
-  RegistrationResponseJSON,
-} from '@simplewebauthn/typescript-types';
-
+type AuthenticationResponseJSON = { id: string } & Record<string, unknown>;
+type RegistrationResponseJSON = Record<string, any>;
+type AuthenticatorTransportFuture = string;
+type AuthenticatorDevice = string;
+type Base64URLString = string;
 
 if (!globalThis.crypto) {
   globalThis.crypto = webcrypto as Crypto;
@@ -49,7 +46,7 @@ const getEffectiveRPID = (req: express.Request, originValue: string): string => 
 
 type StoredAuthenticator = {
   credentialID: Base64URLString;
-  credentialPublicKey: Uint8Array;
+  credentialPublicKey: Uint8Array<ArrayBufferLike>;
   counter: number;
   transports?: AuthenticatorTransportFuture[];
   deviceType?: AuthenticatorDevice;
@@ -57,7 +54,7 @@ type StoredAuthenticator = {
 };
 
 type UserRecord = {
-  id: Uint8Array;
+  id: Uint8Array<ArrayBufferLike>;
   email: string;
   currentChallenge?: string;
   authenticators: StoredAuthenticator[];
