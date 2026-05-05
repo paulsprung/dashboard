@@ -130,7 +130,7 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
     })),
     authenticatorSelection: {
       residentKey: 'required',
-      userVerification: 'preferred',
+      userVerification: requireUserVerification ? 'required' : 'preferred',
     },
   });
 
@@ -210,7 +210,7 @@ app.post('/api/auth/passkey/authentication-options', async (req, res) => {
       id: authenticator.credentialID,
       transports: authenticator.transports,
     })),
-    userVerification: 'preferred',
+    userVerification: requireUserVerification ? 'required' : 'preferred',
   });
 
   user.currentChallenge = options.challenge;
