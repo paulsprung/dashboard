@@ -253,6 +253,16 @@ app.get('/api/auth/health', (req, res) => {
   res.json({ ok: true, rpID: effectiveRPID, rpName, origin: effectiveOrigin, message: 'Passkey auth server is running' });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Passkey auth API listening on http://localhost:${port}`);
+});
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Stop the other process or set PORT to a free port.`);
+    process.exit(1);
+  }
+
+  console.error('Server failed to start', error);
+  process.exit(1);
 });
