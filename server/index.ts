@@ -196,19 +196,35 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 
 app.post('/api/setup/complete', (req, res) => {
   if (setupState.completed) return res.status(410).json({ error: 'Setup already completed' });
-  const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
-  if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
-  const root = usersByEmail.get(setupState.rootEmail);
-  if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
 
-  if (!setupState.backupPasswordAccepted) return res.status(400).json({ error: 'Acknowledge backup password first' });
+  const body = req.body as {
+    email?: string;
+    dashboardName?: string;
+    theme?: 'dark' | 'light';
+    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+  };
+  const email = body.email;
+
+  if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) {
+    return res.status(400).json({ error: 'Root account mismatch' });
+  }
+
+  const root = usersByEmail.get(setupState.rootEmail);
+  if (!root || root.authenticators.length === 0) {
+    return res.status(400).json({ error: 'Register a root passkey first' });
+  }
+
+  if (!setupState.backupPasswordAccepted) {
+    return res.status(400).json({ error: 'Acknowledge backup password first' });
+  }
+
   setupState.dashboardName = body.dashboardName?.trim() || setupState.dashboardName;
   setupState.theme = body.theme === 'light' ? 'light' : 'dark';
   setupState.accent = body.accent && ['cyan', 'violet', 'emerald', 'rose'].includes(body.accent) ? body.accent : 'cyan';
   setupState.completed = true;
+
   return res.json({ ok: true });
 });
-
 
 app.post('/api/setup/root/registration-options', async (req, res) => {
   if (setupState.completed) return res.status(410).json({ error: 'Root setup registration is disabled after setup completion' });
