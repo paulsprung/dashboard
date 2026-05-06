@@ -210,7 +210,13 @@ app.post('/api/setup/complete', (req, res) => {
 });
 
 app.post('/api/auth/passkey/registration-options', async (req, res) => {
-  const { email } = req.body as { email?: string };
+  const body = req.body as {
+    email?: string;
+    dashboardName?: string;
+    theme?: 'dark' | 'light';
+    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+  };
+  const email = body.email;
   if (!email) return res.status(400).json({ error: 'Email is required' });
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -315,7 +321,13 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 });
 
 app.post('/api/auth/passkey/authentication-options', async (req, res) => {
-  const { email } = req.body as { email?: string };
+  const body = req.body as {
+    email?: string;
+    dashboardName?: string;
+    theme?: 'dark' | 'light';
+    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+  };
+  const email = body.email;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
 
