@@ -176,12 +176,7 @@ app.post('/api/setup/start', (req, res) => {
 
 app.post('/api/setup/generate-backup-password', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email, dashboardName, theme, accent } = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
+  const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -201,12 +196,7 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 
 app.post('/api/setup/complete', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email, dashboardName, theme, accent } = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
+  const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -220,12 +210,7 @@ app.post('/api/setup/complete', (req, res) => {
 });
 
 app.post('/api/auth/passkey/registration-options', async (req, res) => {
-  const { email, dashboardName, theme, accent } = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
+  const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!email) return res.status(400).json({ error: 'Email is required' });
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -233,10 +218,10 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
     if (!setupState.rootEmail || normalizedEmail !== setupState.rootEmail) {
       return res.status(403).json({ error: 'During setup, only root user can register a passkey' });
     }
-  } else if (!isAdmin(req)) {
+  } else {
     const invite = inviteToken ? invites.get(inviteToken) : undefined;
     if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
-      return res.status(403).json({ error: 'Only admin can register new passkeys (or provide a valid invite)' });
+      return res.status(403).json({ error: 'A valid invite token is required for passkey registration' });
     }
   }
 
@@ -273,6 +258,15 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 
   if (!email || !registrationResponse) {
     return res.status(400).json({ error: 'Email and registrationResponse are required' });
+  }
+
+
+  if (setupState.completed) {
+    const invite = inviteToken ? invites.get(inviteToken) : undefined;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
+      return res.status(403).json({ error: 'A valid invite token is required for registration' });
+    }
   }
 
   const user = usersByEmail.get(email.trim().toLowerCase());
@@ -316,7 +310,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
   }
 
 
-  if (setupState.completed && !isAdmin(req) && inviteToken) {
+  if (setupState.completed && inviteToken) {
     const invite = invites.get(inviteToken);
     if (invite && invite.email === email.trim().toLowerCase()) {
       user.role = invite.role;
@@ -329,13 +323,17 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 });
 
 app.post('/api/auth/passkey/authentication-options', async (req, res) => {
-  const { email, dashboardName, theme, accent } = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
+  const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!email) return res.status(400).json({ error: 'Email is required' });
+
+
+  if (setupState.completed) {
+    const invite = inviteToken ? invites.get(inviteToken) : undefined;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
+      return res.status(403).json({ error: 'A valid invite token is required for registration' });
+    }
+  }
 
   const user = usersByEmail.get(email.trim().toLowerCase());
   if (!user || user.authenticators.length === 0) {
@@ -462,11 +460,7 @@ app.get('/api/admin/users', (req, res) => {
 
 app.post('/api/admin/users', (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { email, role } = req.body as { email?: string; role?: UserRole };
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-  const user = getOrCreateUser(email.trim().toLowerCase());
-  user.role = role && ['admin', 'user', 'readonly'].includes(role) ? role : 'user';
-  return res.json({ ok: true, user: { email: user.email, role: user.role } });
+  return res.status(410).json({ error: 'Direct user creation is disabled. Use invite links.' });
 });
 
 
