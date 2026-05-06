@@ -23,8 +23,19 @@ if (!globalThis.crypto) {
 }
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+const allowedOrigin = process.env.ORIGIN;
+app.use(cors({
+  origin: allowedOrigin ? [allowedOrigin] : true,
+  credentials: true,
+}));
+app.use((_, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+app.use(express.json({ limit: '1mb' }));
 
 const rpName = process.env.RP_NAME ?? 'SM Dashboard';
 const port = Number(process.env.PORT ?? 3001);
@@ -129,7 +140,7 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
       transports: authenticator.transports,
     })),
     authenticatorSelection: {
-      residentKey: 'required',
+      residentKey: 'preferred',
       userVerification: requireUserVerification ? 'required' : 'preferred',
     },
   });
@@ -292,6 +303,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
 app.get('/api/auth/me', (req, res) => {
   const user = getCurrentUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  res.setHeader('Cache-Control', 'no-store');
   return res.json({ user: { id: Buffer.from(user.id).toString('base64url'), email: user.email } });
 });
 
@@ -299,7 +311,8 @@ app.post('/api/auth/logout', (req, res) => {
   const cookies = parseCookies(req.headers.cookie);
   const token = cookies[sessionCookieName];
   if (token) sessions.delete(token);
-  res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  const isSecure = !getEffectiveOrigin(req).startsWith('http://localhost');
+  res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure ? '; Secure' : ''}`);
   return res.json({ ok: true });
 });
 
