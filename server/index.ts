@@ -94,6 +94,7 @@ type SetupState = {
   completed: boolean;
   dashboardName: string;
   theme: 'dark' | 'light';
+  accent: 'cyan' | 'violet' | 'emerald' | 'rose';
   rootEmail?: string;
   rootBackupPassword?: string;
   backupPasswordAccepted?: boolean;
@@ -103,6 +104,7 @@ const setupState: SetupState = {
   completed: false,
   dashboardName: 'SM Dashboard',
   theme: 'dark',
+  accent: 'cyan',
 };
 
 const generateBackupPassword = () => crypto.randomBytes(18).toString('base64url');
@@ -156,7 +158,7 @@ const getOrCreateUser = (email: string): UserRecord => {
 
 
 app.get('/api/setup/status', (_req, res) => {
-  return res.json({ completed: setupState.completed, dashboardName: setupState.dashboardName, theme: setupState.theme, setupStarted: Boolean(setupState.rootEmail), backupPasswordAccepted: Boolean(setupState.backupPasswordAccepted) });
+  return res.json({ completed: setupState.completed, dashboardName: setupState.dashboardName, theme: setupState.theme, accent: setupState.accent, setupStarted: Boolean(setupState.rootEmail), backupPasswordAccepted: Boolean(setupState.backupPasswordAccepted) });
 });
 
 app.post('/api/setup/start', (req, res) => {
@@ -174,7 +176,7 @@ app.post('/api/setup/start', (req, res) => {
 
 app.post('/api/setup/generate-backup-password', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email, dashboardName, theme } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light' };
+  const { email, dashboardName, theme, accent } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light'; accent?: 'cyan' | 'violet' | 'emerald' | 'rose' };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -194,7 +196,7 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 
 app.post('/api/setup/complete', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email, dashboardName, theme } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light' };
+  const { email, dashboardName, theme, accent } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light'; accent?: 'cyan' | 'violet' | 'emerald' | 'rose' };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -202,12 +204,13 @@ app.post('/api/setup/complete', (req, res) => {
   if (!setupState.backupPasswordAccepted) return res.status(400).json({ error: 'Acknowledge backup password first' });
   setupState.dashboardName = dashboardName?.trim() || setupState.dashboardName;
   setupState.theme = theme === 'light' ? 'light' : 'dark';
+  setupState.accent = accent && ['cyan', 'violet', 'emerald', 'rose'].includes(accent) ? accent : 'cyan';
   setupState.completed = true;
   return res.json({ ok: true });
 });
 
 app.post('/api/auth/passkey/registration-options', async (req, res) => {
-  const { email, dashboardName, theme } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light' };
+  const { email, dashboardName, theme, accent } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light'; accent?: 'cyan' | 'violet' | 'emerald' | 'rose' };
   if (!email) return res.status(400).json({ error: 'Email is required' });
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -311,7 +314,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 });
 
 app.post('/api/auth/passkey/authentication-options', async (req, res) => {
-  const { email, dashboardName, theme } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light' };
+  const { email, dashboardName, theme, accent } = req.body as { email?: string; dashboardName?: string; theme?: 'dark' | 'light'; accent?: 'cyan' | 'violet' | 'emerald' | 'rose' };
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   const user = usersByEmail.get(email.trim().toLowerCase());
@@ -403,7 +406,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
 
   return res.json({
     verified: true,
-    user: { id: userId, email: user.email },
+    user: { id: userId, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
   });
 });
 
@@ -411,7 +414,7 @@ app.get('/api/auth/me', (req, res) => {
   const user = getCurrentUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ user: { id: Buffer.from(user.id).toString('base64url'), email: user.email, role: user.role, avatarUrl: user.avatarUrl }, setup: { dashboardName: setupState.dashboardName, theme: setupState.theme, isAdmin: isAdmin(req) } });
+  return res.json({ user: { id: Buffer.from(user.id).toString('base64url'), email: user.email, role: user.role, avatarUrl: user.avatarUrl }, setup: { dashboardName: setupState.dashboardName, theme: setupState.theme, accent: setupState.accent, isAdmin: isAdmin(req) } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
