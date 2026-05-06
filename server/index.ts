@@ -176,13 +176,7 @@ app.post('/api/setup/start', (req, res) => {
 
 app.post('/api/setup/generate-backup-password', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const body = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
-  const email = body.email;
+  const { email } = req.body as { email?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -202,13 +196,7 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 
 app.post('/api/setup/complete', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const body = req.body as {
-    email?: string;
-    dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
-  };
-  const email = body.email;
+  const { email } = req.body as { email?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -279,14 +267,6 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
   }
 
 
-  if (setupState.completed) {
-    const invite = inviteToken ? invites.get(inviteToken) : undefined;
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
-      return res.status(403).json({ error: 'A valid invite token is required for registration' });
-    }
-  }
-
   const user = usersByEmail.get(email.trim().toLowerCase());
   if (!user || !user.currentChallenge) {
     return res.status(400).json({ error: 'Registration challenge not found for user' });
@@ -350,14 +330,6 @@ app.post('/api/auth/passkey/authentication-options', async (req, res) => {
   const email = body.email;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
-
-  if (setupState.completed) {
-    const invite = inviteToken ? invites.get(inviteToken) : undefined;
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
-      return res.status(403).json({ error: 'A valid invite token is required for registration' });
-    }
-  }
 
   const user = usersByEmail.get(email.trim().toLowerCase());
   if (!user || user.authenticators.length === 0) {
