@@ -3,6 +3,8 @@ import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
 type SessionUser = { id: string; email: string };
 
+type SetupStatus = { completed: boolean; dashboardName: string; theme: 'dark' | 'light' };
+
 const readErrorMessage = async (response: Response, fallback: string) => {
   try {
     const payload = (await response.json()) as { error?: string };
@@ -13,126 +15,114 @@ const readErrorMessage = async (response: Response, fallback: string) => {
 };
 
 export default function App() {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState('');
-  const [isBusy, setIsBusy] = useState(false);
+  const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [email, setEmail] = useState('');
+  const [dashboardName, setDashboardName] = useState('SM Dashboard');
+  const [status, setStatus] = useState('');
+  const [backupPassword, setBackupPassword] = useState('');
+  const [setupStarted, setSetupStarted] = useState(false);
 
   useEffect(() => {
-    const loadSession = async () => {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { user: SessionUser };
-      setUser(payload.user);
+    const boot = async () => {
+      const setupRes = await fetch('/api/setup/status');
+      const setupPayload = (await setupRes.json()) as SetupStatus;
+      setSetup(setupPayload);
+
+      if (setupPayload.completed) {
+        const response = await fetch('/api/auth/me', { credentials: 'include' });
+        if (response.ok) {
+          const payload = (await response.json()) as { user: SessionUser };
+          setUser(payload.user);
+        }
+      }
     };
 
-    void loadSession();
+    void boot();
   }, []);
 
-  const registerPasskey = async () => {
-    setStatus('Creating registration challenge...');
-    setIsBusy(true);
-    try {
-      const optionsResponse = await fetch('/api/auth/passkey/registration-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      if (!optionsResponse.ok) throw new Error(await readErrorMessage(optionsResponse, 'Failed to load registration options'));
-      const options = await optionsResponse.json();
-      const registrationResponse = await startRegistration({ optionsJSON: options });
-      const verifyResponse = await fetch('/api/auth/passkey/verify-registration', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse }),
-      });
-      if (!verifyResponse.ok) throw new Error(await readErrorMessage(verifyResponse, 'Passkey registration failed'));
-      setStatus('✅ Passkey registered. You can now sign in.');
-    } catch (error) {
-      setStatus(`❌ ${(error as Error).message}`);
-    } finally { setIsBusy(false); }
+  const startSetup = async () => {
+    const response = await fetch('/api/setup/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rootEmail: email, dashboardName, theme: 'dark' }),
+    });
+    if (!response.ok) return setStatus(`❌ ${await readErrorMessage(response, 'Setup failed')}`);
+    const payload = (await response.json()) as { rootBackupPassword: string };
+    setBackupPassword(payload.rootBackupPassword);
+    setSetupStarted(true);
+    setStatus('✅ Setup initialized. Register your root passkey now.');
+  };
+
+  const registerRootPasskey = async () => {
+    const optionsResponse = await fetch('/api/auth/passkey/registration-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+    });
+    if (!optionsResponse.ok) return setStatus(`❌ ${await readErrorMessage(optionsResponse, 'Failed to load registration options')}`);
+    const options = await optionsResponse.json();
+    const registrationResponse = await startRegistration({ optionsJSON: options });
+    const verifyResponse = await fetch('/api/auth/passkey/verify-registration', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse }),
+    });
+    if (!verifyResponse.ok) return setStatus(`❌ ${await readErrorMessage(verifyResponse, 'Passkey registration failed')}`);
+
+    const complete = await fetch('/api/setup/complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+    });
+    if (!complete.ok) return setStatus(`❌ ${await readErrorMessage(complete, 'Failed to complete setup')}`);
+
+    setSetup({ completed: true, dashboardName, theme: 'dark' });
+    setStatus('✅ Setup completed. Please sign in.');
   };
 
   const loginWithPasskey = async () => {
-    setStatus('Requesting login challenge...');
-    setIsBusy(true);
-    try {
-      const challengeResponse = await fetch('/api/auth/passkey/authentication-options', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
-      });
-      if (!challengeResponse.ok) throw new Error(await readErrorMessage(challengeResponse, 'Failed to load authentication options'));
-      const options = await challengeResponse.json();
-      const assertion = await startAuthentication({ optionsJSON: options });
-      const verifyResponse = await fetch('/api/auth/passkey/verify-authentication', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(assertion),
-      });
-      if (!verifyResponse.ok) throw new Error(await readErrorMessage(verifyResponse, 'Passkey verification failed'));
-      const payload = (await verifyResponse.json()) as { user: SessionUser };
-      setUser(payload.user);
-      setStatus('✅ Login successful.');
-    } catch (error) {
-      setStatus(`❌ ${(error as Error).message}`);
-    } finally { setIsBusy(false); }
+    const challengeResponse = await fetch('/api/auth/passkey/authentication-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+    });
+    if (!challengeResponse.ok) return setStatus(`❌ ${await readErrorMessage(challengeResponse, 'Failed to load authentication options')}`);
+    const options = await challengeResponse.json();
+    const assertion = await startAuthentication({ optionsJSON: options });
+    const verifyResponse = await fetch('/api/auth/passkey/verify-authentication', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(assertion),
+    });
+    if (!verifyResponse.ok) return setStatus(`❌ ${await readErrorMessage(verifyResponse, 'Passkey verification failed')}`);
+    const payload = (await verifyResponse.json()) as { user: SessionUser };
+    setUser(payload.user);
   };
 
-  const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    setUser(null);
-    setStatus('');
-  };
+  if (!setup) return <main className="min-h-screen bg-slate-950 p-8 text-slate-100">Loading...</main>;
 
-  if (user) {
+  if (!setup.completed) {
     return (
-      <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
-        <section className="mx-auto max-w-4xl rounded-2xl border border-slate-700 bg-slate-900 p-8">
-          <div className="mb-8 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Dashboard</p>
-              <h1 className="mt-2 text-2xl font-semibold">Hallo, {user.email}</h1>
-            </div>
-            <button className="rounded-lg border border-slate-600 px-4 py-2 hover:bg-slate-800" onClick={logout} type="button">Logout</button>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {['Umsatz', 'Aktive Nutzer', 'Server Status'].map((item) => (
-              <article className="rounded-xl border border-slate-700 bg-slate-950/70 p-4" key={item}>
-                <p className="text-sm text-slate-400">{item}</p>
-                <p className="mt-2 text-2xl font-semibold text-cyan-200">Demo</p>
-              </article>
-            ))}
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
+        <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8">
+          <h1 className="text-2xl font-semibold">Initial Setup</h1>
+          <p className="mt-2 text-sm text-slate-400">Create root admin and register root passkey once.</p>
+          <div className="mt-4 space-y-3">
+            <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3" placeholder="Root email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3" placeholder="Dashboard name" value={dashboardName} onChange={(e) => setDashboardName(e.target.value)} />
+            {!setupStarted ? <button className="w-full rounded-lg bg-cyan-400 px-4 py-3 font-medium text-slate-900" onClick={startSetup} type="button">Start setup</button> : <button className="w-full rounded-lg bg-cyan-400 px-4 py-3 font-medium text-slate-900" onClick={registerRootPasskey} type="button">Register root passkey & finish</button>}
+            {backupPassword && <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">Backup admin password (save now): <strong>{backupPassword}</strong></p>}
+            {status && <p className="text-sm text-slate-300">{status}</p>}
           </div>
         </section>
       </main>
     );
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-      <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 shadow-xl">
-        <h1 className="text-2xl font-semibold">Sign in with Passkey</h1>
-        <p className="mt-2 text-sm text-slate-400">Clean, passwordless login for your dashboard.</p>
-
-        <form className="mt-6 space-y-4" onSubmit={(event) => event.preventDefault()}>
-          <label className="block">
-            <span className="mb-2 block text-sm text-slate-300">Email</span>
-            <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none ring-cyan-400 transition focus:ring"
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@domain.com"
-              type="email"
-              value={email}
-            />
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button className="rounded-lg border border-slate-600 px-4 py-3 font-medium hover:bg-slate-800 disabled:opacity-60" disabled={isBusy || !email} onClick={registerPasskey} type="button">
-              {isBusy ? 'Processing…' : 'Register passkey'}
-            </button>
-            <button className="rounded-lg bg-cyan-400 px-4 py-3 font-medium text-slate-900 hover:bg-cyan-300 disabled:opacity-60" disabled={isBusy || !email} onClick={loginWithPasskey} type="button">
-              {isBusy ? 'Processing…' : 'Sign in'}
-            </button>
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
+        <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8">
+          <h1 className="text-2xl font-semibold">Sign in</h1>
+          <p className="mt-2 text-sm text-slate-400">Use your passkey to access the dashboard.</p>
+          <div className="mt-4 space-y-3">
+            <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3" placeholder="you@domain.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button className="w-full rounded-lg bg-cyan-400 px-4 py-3 font-medium text-slate-900" onClick={loginWithPasskey} type="button">Sign in</button>
+            {status && <p className="text-sm text-slate-300">{status}</p>}
           </div>
+        </section>
+      </main>
+    );
+  }
 
-          {status && <p className="text-sm text-slate-300">{status}</p>}
-        </form>
-      </section>
-    </main>
-  );
+  return <main className="min-h-screen bg-slate-950 p-8 text-slate-100">Welcome {user.email}. Dashboard ready.</main>;
 }

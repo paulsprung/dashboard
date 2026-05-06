@@ -83,6 +83,23 @@ const usersByEmail = new Map<string, UserRecord>();
 const sessions = new Map<string, string>();
 
 
+type SetupState = {
+  completed: boolean;
+  dashboardName: string;
+  theme: 'dark' | 'light';
+  rootEmail?: string;
+  rootBackupPassword?: string;
+};
+
+const setupState: SetupState = {
+  completed: false,
+  dashboardName: 'SM Dashboard',
+  theme: 'dark',
+};
+
+const generateBackupPassword = () => crypto.randomBytes(18).toString('base64url');
+
+
 const parseCookies = (cookieHeader?: string): Record<string, string> => {
   if (!cookieHeader) return {};
   return cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
@@ -108,6 +125,13 @@ const getCurrentUserFromSession = (req: express.Request): UserRecord | undefined
   return [...usersByEmail.values()].find((user) => Buffer.from(user.id).toString('base64url') === userId);
 };
 
+
+const getSessionUser = (req: express.Request): UserRecord | undefined => getCurrentUserFromSession(req);
+const isAdmin = (req: express.Request) => {
+  const user = getSessionUser(req);
+  return Boolean(user && setupState.rootEmail && user.email === setupState.rootEmail);
+};
+
 const getOrCreateUser = (email: string): UserRecord => {
   const existing = usersByEmail.get(email);
   if (existing) return existing;
@@ -121,11 +145,50 @@ const getOrCreateUser = (email: string): UserRecord => {
   return created;
 };
 
+
+app.get('/api/setup/status', (_req, res) => {
+  return res.json({ completed: setupState.completed, dashboardName: setupState.dashboardName, theme: setupState.theme });
+});
+
+app.post('/api/setup/start', (req, res) => {
+  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  const { rootEmail, dashboardName, theme } = req.body as { rootEmail?: string; dashboardName?: string; theme?: 'dark' | 'light' };
+  if (!rootEmail) return res.status(400).json({ error: 'rootEmail is required' });
+
+  setupState.rootEmail = rootEmail.trim().toLowerCase();
+  setupState.dashboardName = dashboardName?.trim() || 'SM Dashboard';
+  setupState.theme = theme === 'light' ? 'light' : 'dark';
+  setupState.rootBackupPassword = generateBackupPassword();
+  getOrCreateUser(setupState.rootEmail);
+
+  return res.json({ ok: true, rootBackupPassword: setupState.rootBackupPassword });
+});
+
+app.post('/api/setup/complete', (req, res) => {
+  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  const { email } = req.body as { email?: string };
+  if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
+  const root = usersByEmail.get(setupState.rootEmail);
+  if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
+
+  setupState.completed = true;
+  return res.json({ ok: true });
+});
+
 app.post('/api/auth/passkey/registration-options', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'Email is required' });
+  const normalizedEmail = email.trim().toLowerCase();
 
-  const user = getOrCreateUser(email);
+  if (!setupState.completed) {
+    if (!setupState.rootEmail || normalizedEmail !== setupState.rootEmail) {
+      return res.status(403).json({ error: 'During setup, only root user can register a passkey' });
+    }
+  } else if (!isAdmin(req)) {
+    return res.status(403).json({ error: 'Only admin can register new passkeys' });
+  }
+
+  const user = getOrCreateUser(normalizedEmail);
   const effectiveOrigin = getEffectiveOrigin(req);
   const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
 
@@ -159,7 +222,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
     return res.status(400).json({ error: 'Email and registrationResponse are required' });
   }
 
-  const user = usersByEmail.get(email);
+  const user = usersByEmail.get(email.trim().toLowerCase());
   if (!user || !user.currentChallenge) {
     return res.status(400).json({ error: 'Registration challenge not found for user' });
   }
@@ -207,7 +270,7 @@ app.post('/api/auth/passkey/authentication-options', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
-  const user = usersByEmail.get(email);
+  const user = usersByEmail.get(email.trim().toLowerCase());
   if (!user || user.authenticators.length === 0) {
     return res.status(404).json({ error: 'No passkey found for this account yet. Register one first.' });
   }
@@ -304,7 +367,7 @@ app.get('/api/auth/me', (req, res) => {
   const user = getCurrentUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ user: { id: Buffer.from(user.id).toString('base64url'), email: user.email } });
+  return res.json({ user: { id: Buffer.from(user.id).toString('base64url'), email: user.email }, setup: { dashboardName: setupState.dashboardName, theme: setupState.theme, isAdmin: isAdmin(req) } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
