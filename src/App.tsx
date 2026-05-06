@@ -51,10 +51,10 @@ export default function App() {
     setStep(2);
   };
   const registerRootPasskey = async () => {
-    const options = await fetch('/api/auth/passkey/registration-options', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    const options = await fetch('/api/setup/root/registration-options', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
     if (!options.ok) return setStatus(`❌ ${await readErrorMessage(options, 'Failed to load registration options')}`);
     const registrationResponse = await startRegistration({ optionsJSON: await options.json() });
-    const verify = await fetch('/api/auth/passkey/verify-registration', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse }) });
+    const verify = await fetch('/api/setup/root/verify-registration', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse }) });
     if (!verify.ok) return setStatus(`❌ ${await readErrorMessage(verify, 'Registration failed')}`);
     setStep(3);
   };

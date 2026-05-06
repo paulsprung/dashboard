@@ -162,7 +162,7 @@ app.get('/api/setup/status', (_req, res) => {
 });
 
 app.post('/api/setup/start', (req, res) => {
-  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  if (setupState.completed) return res.status(410).json({ error: 'Setup already completed' });
   const { rootEmail } = req.body as { rootEmail?: string };
   if (!rootEmail) return res.status(400).json({ error: 'rootEmail is required' });
 
@@ -175,7 +175,7 @@ app.post('/api/setup/start', (req, res) => {
 
 
 app.post('/api/setup/generate-backup-password', (req, res) => {
-  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  if (setupState.completed) return res.status(410).json({ error: 'Setup already completed' });
   const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
@@ -187,7 +187,7 @@ app.post('/api/setup/generate-backup-password', (req, res) => {
 });
 
 app.post('/api/setup/acknowledge-backup-password', (req, res) => {
-  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  if (setupState.completed) return res.status(410).json({ error: 'Setup already completed' });
   const { accepted } = req.body as { accepted?: boolean };
   if (!accepted) return res.status(400).json({ error: 'Backup password must be acknowledged' });
   setupState.backupPasswordAccepted = true;
@@ -195,7 +195,7 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 });
 
 app.post('/api/setup/complete', (req, res) => {
-  if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
+  if (setupState.completed) return res.status(410).json({ error: 'Setup already completed' });
   const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
@@ -209,20 +209,82 @@ app.post('/api/setup/complete', (req, res) => {
   return res.json({ ok: true });
 });
 
+
+app.post('/api/setup/root/registration-options', async (req, res) => {
+  if (setupState.completed) return res.status(410).json({ error: 'Root setup registration is disabled after setup completion' });
+  const { email } = req.body as { email?: string };
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!setupState.rootEmail || normalizedEmail !== setupState.rootEmail) {
+    return res.status(403).json({ error: 'Only configured root email can register during setup' });
+  }
+
+  const user = getOrCreateUser(normalizedEmail);
+  const effectiveOrigin = getEffectiveOrigin(req);
+  const effectiveRPID = getEffectiveRPID(req, effectiveOrigin);
+  const options = await generateRegistrationOptions({
+    rpID: effectiveRPID,
+    rpName,
+    userName: user.email,
+    userID: user.id,
+    attestationType: 'none',
+    excludeCredentials: user.authenticators.map((authenticator) => ({ id: authenticator.credentialID, transports: authenticator.transports })),
+    authenticatorSelection: { residentKey: 'preferred', userVerification: requireUserVerification ? 'required' : 'preferred' },
+  });
+
+  user.currentChallenge = options.challenge;
+  return res.json(options);
+});
+
+app.post('/api/setup/root/verify-registration', async (req, res) => {
+  if (setupState.completed) return res.status(410).json({ error: 'Root setup registration is disabled after setup completion' });
+  const { email, registrationResponse } = req.body as { email?: string; registrationResponse?: RegistrationResponseJSON };
+  if (!email || !registrationResponse) return res.status(400).json({ error: 'Email and registrationResponse are required' });
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!setupState.rootEmail || normalizedEmail !== setupState.rootEmail) return res.status(403).json({ error: 'Root account mismatch' });
+  const user = usersByEmail.get(normalizedEmail);
+  if (!user || !user.currentChallenge) return res.status(400).json({ error: 'Registration challenge not found for user' });
+
+  let verification: VerifiedRegistrationResponse;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: registrationResponse,
+      expectedChallenge: user.currentChallenge,
+      expectedOrigin: getEffectiveOrigin(req),
+      expectedRPID: getEffectiveRPID(req, getEffectiveOrigin(req)),
+      requireUserVerification,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown registration verification error';
+    return res.status(400).json({ error: message });
+  }
+
+  if (!verification.verified || !verification.registrationInfo) return res.status(400).json({ verified: false });
+  const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+  const alreadyRegistered = user.authenticators.some((item) => item.credentialID === credential.id);
+  if (!alreadyRegistered) {
+    user.authenticators.push({
+      credentialID: credential.id,
+      credentialPublicKey: credential.publicKey,
+      counter: credential.counter ?? 0,
+      transports: registrationResponse.response.transports,
+      deviceType: credentialDeviceType,
+      backedUp: credentialBackedUp,
+    });
+  }
+  user.currentChallenge = undefined;
+  return res.json({ verified: true });
+});
+
 app.post('/api/auth/passkey/registration-options', async (req, res) => {
   const { email, inviteToken } = req.body as { email?: string; inviteToken?: string };
   if (!email) return res.status(400).json({ error: 'Email is required' });
   const normalizedEmail = email.trim().toLowerCase();
 
-  if (!setupState.completed) {
-    if (!setupState.rootEmail || normalizedEmail !== setupState.rootEmail) {
-      return res.status(403).json({ error: 'During setup, only root user can register a passkey' });
-    }
-  } else {
-    const invite = inviteToken ? invites.get(inviteToken) : undefined;
-    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
-      return res.status(403).json({ error: 'A valid invite token is required for passkey registration' });
-    }
+  if (!setupState.completed) return res.status(410).json({ error: 'User registration is disabled until root setup is completed' });
+  const invite = inviteToken ? invites.get(inviteToken) : undefined;
+  if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
+    return res.status(403).json({ error: 'A valid invite token is required for passkey registration' });
   }
 
   const user = getOrCreateUser(normalizedEmail);
