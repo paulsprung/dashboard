@@ -42,17 +42,13 @@ export default function App() {
       const options = await optionsResponse.json();
       const registrationResponse = await startRegistration({ optionsJSON: options });
       const verifyResponse = await fetch('/api/auth/passkey/verify-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, registrationResponse }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse }),
       });
       if (!verifyResponse.ok) throw new Error(await readErrorMessage(verifyResponse, 'Passkey registration failed'));
       setStatus('✅ Passkey registered. You can now sign in.');
     } catch (error) {
       setStatus(`❌ ${(error as Error).message}`);
-    } finally {
-      setIsBusy(false);
-    }
+    } finally { setIsBusy(false); }
   };
 
   const loginWithPasskey = async () => {
@@ -74,9 +70,7 @@ export default function App() {
       setStatus('✅ Login successful.');
     } catch (error) {
       setStatus(`❌ ${(error as Error).message}`);
-    } finally {
-      setIsBusy(false);
-    }
+    } finally { setIsBusy(false); }
   };
 
   const logout = async () => {
