@@ -86,6 +86,9 @@ type UserRecord = {
 const usersByEmail = new Map<string, UserRecord>();
 const sessions = new Map<string, string>();
 
+type InviteRecord = { email: string; role: UserRole; expiresAt: number; used: boolean };
+const invites = new Map<string, InviteRecord>();
+
 
 type SetupState = {
   completed: boolean;
@@ -213,7 +216,10 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
       return res.status(403).json({ error: 'During setup, only root user can register a passkey' });
     }
   } else if (!isAdmin(req)) {
-    return res.status(403).json({ error: 'Only admin can register new passkeys' });
+    const invite = inviteToken ? invites.get(inviteToken) : undefined;
+    if (!invite || invite.used || invite.expiresAt < Date.now() || invite.email !== normalizedEmail) {
+      return res.status(403).json({ error: 'Only admin can register new passkeys (or provide a valid invite)' });
+    }
   }
 
   const user = getOrCreateUser(normalizedEmail);
@@ -241,9 +247,10 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
 });
 
 app.post('/api/auth/passkey/verify-registration', async (req, res) => {
-  const { email, registrationResponse } = req.body as {
+  const { email, registrationResponse, inviteToken } = req.body as {
     email?: string;
     registrationResponse?: RegistrationResponseJSON;
+    inviteToken?: string;
   };
 
   if (!email || !registrationResponse) {
@@ -288,6 +295,15 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
     });
+  }
+
+
+  if (setupState.completed && !isAdmin(req) && inviteToken) {
+    const invite = invites.get(inviteToken);
+    if (invite && invite.email === email.trim().toLowerCase()) {
+      user.role = invite.role;
+      invite.used = true;
+    }
   }
 
   user.currentChallenge = undefined;
@@ -428,6 +444,18 @@ app.post('/api/admin/users', (req, res) => {
   const user = getOrCreateUser(email.trim().toLowerCase());
   user.role = role && ['admin', 'user', 'readonly'].includes(role) ? role : 'user';
   return res.json({ ok: true, user: { email: user.email, role: user.role } });
+});
+
+
+app.post('/api/admin/invites', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const { email, role, ttlMinutes } = req.body as { email?: string; role?: UserRole; ttlMinutes?: number };
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+  const normalizedEmail = email.trim().toLowerCase();
+  const safeRole: UserRole = role && ['admin', 'user', 'readonly'].includes(role) ? role : 'user';
+  const token = crypto.randomBytes(24).toString('base64url');
+  invites.set(token, { email: normalizedEmail, role: safeRole, expiresAt: Date.now() + Math.max(5, ttlMinutes ?? 60) * 60_000, used: false });
+  return res.json({ ok: true, token, inviteUrl: `${getEffectiveOrigin(req)}/?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(normalizedEmail)}` });
 });
 
 app.get('/api/auth/health', (req, res) => {
