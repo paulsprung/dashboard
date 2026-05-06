@@ -176,7 +176,13 @@ app.post('/api/setup/start', (req, res) => {
 
 app.post('/api/setup/generate-backup-password', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email } = req.body as { email?: string };
+  const body = req.body as {
+    email?: string;
+    dashboardName?: string;
+    theme?: 'dark' | 'light';
+    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+  };
+  const email = body.email;
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
@@ -196,7 +202,13 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
 
 app.post('/api/setup/complete', (req, res) => {
   if (setupState.completed) return res.status(403).json({ error: 'Setup already completed' });
-  const { email } = req.body as { email?: string };
+  const body = req.body as {
+    email?: string;
+    dashboardName?: string;
+    theme?: 'dark' | 'light';
+    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+  };
+  const email = body.email;
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) return res.status(400).json({ error: 'Root account mismatch' });
   const root = usersByEmail.get(setupState.rootEmail);
   if (!root || root.authenticators.length === 0) return res.status(400).json({ error: 'Register a root passkey first' });
