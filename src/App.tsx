@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 
 type Role = 'root' | 'admin' | 'user' | 'readonly';
-type Accent = 'cyan' | 'violet' | 'emerald' | 'rose';
+type Accent = 'blue' | 'cyan' | 'violet' | 'emerald' | 'rose';
 type SessionUser = { id: string; email: string; role: Role; avatarUrl?: string };
-type SetupStatus = { completed: boolean; dashboardName: string; theme: 'dark' | 'light'; accent: Accent; setupStarted: boolean; backupPasswordAccepted: boolean };
+type ThemeMode = 'light' | 'dark' | 'ultra-dark';
+type SetupStatus = { completed: boolean; dashboardName: string; theme: ThemeMode; accent: Accent; setupStarted: boolean; backupPasswordAccepted: boolean };
 type AdminUser = { id: string; email: string; role: Role; hasPasskey: boolean; avatarUrl?: string };
 type InvitePayload = { inviteUrl: string };
 
@@ -17,8 +18,8 @@ export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [email, setEmail] = useState('');
   const [dashboardName, setDashboardName] = useState('SM Dashboard');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [accent, setAccent] = useState<Accent>('cyan');
+  const [theme, setTheme] = useState<ThemeMode>('light');
+  const [accent, setAccent] = useState<Accent>('blue');
   const [status, setStatus] = useState('');
   const [inviteToken, setInviteToken] = useState('');
   const [backupPassword, setBackupPassword] = useState('');
@@ -109,14 +110,15 @@ export default function App() {
   };
 
   const accentPalette: Record<Accent, { glow: string; text: string; button: string }> = {
+    blue: { glow: 'from-blue-600/30 to-blue-300/10', text: 'text-blue-200', button: 'bg-blue-400 hover:bg-blue-300 text-slate-900' },
     cyan: { glow: 'from-cyan-500/30 to-cyan-300/10', text: 'text-cyan-200', button: 'bg-cyan-400 hover:bg-cyan-300 text-slate-900' },
     violet: { glow: 'from-violet-500/30 to-violet-300/10', text: 'text-violet-200', button: 'bg-violet-400 hover:bg-violet-300 text-slate-900' },
     emerald: { glow: 'from-emerald-500/30 to-emerald-300/10', text: 'text-emerald-200', button: 'bg-emerald-400 hover:bg-emerald-300 text-slate-900' },
     rose: { glow: 'from-rose-500/30 to-rose-300/10', text: 'text-rose-200', button: 'bg-rose-400 hover:bg-rose-300 text-slate-900' },
   };
   const pal = accentPalette[accent];
-  const shell = theme === 'light' ? 'bg-gradient-to-br from-slate-100 to-white text-slate-900' : `bg-gradient-to-br from-black via-slate-950 to-slate-900 text-slate-100`;
-  const glass = theme === 'light' ? 'bg-white/80 border-slate-200' : 'bg-slate-900/70 border-white/10';
+  const shell = theme === 'light' ? 'bg-gradient-to-br from-slate-100 to-white text-slate-900' : theme === 'dark' ? 'bg-gradient-to-br from-black via-slate-950 to-slate-900 text-slate-100' : 'bg-black text-slate-100';
+  const glass = theme === 'light' ? 'bg-white/80 border-slate-200' : theme === 'dark' ? 'bg-slate-900/70 border-white/10' : 'bg-black/90 border-slate-700';
 
   if (!setup) return <main className={`min-h-screen ${shell} p-8`}>Loading…</main>;
 
@@ -138,10 +140,6 @@ export default function App() {
           {step === 5 && (
             <>
               <input className="w-full rounded-2xl border border-white/20 bg-white/5 px-4 py-3" placeholder="Dashboard name" value={dashboardName} onChange={(e) => setDashboardName(e.target.value)} />
-              <div className="grid grid-cols-2 gap-2">
-                <select className="rounded-2xl border border-white/20 bg-white/5 px-4 py-3" value={theme} onChange={(e) => setTheme(e.target.value as 'dark' | 'light')}><option value="dark">Dark</option><option value="light">Light</option></select>
-                <select className="rounded-2xl border border-white/20 bg-white/5 px-4 py-3" value={accent} onChange={(e) => setAccent(e.target.value as Accent)}><option value="cyan">Cyan</option><option value="violet">Violet</option><option value="emerald">Emerald</option><option value="rose">Rose</option></select>
-              </div>
             </>
           )}
           {step === 4 && backupPassword && <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs">Backup password: <strong>{backupPassword}</strong></p>}
@@ -192,8 +190,7 @@ export default function App() {
       <div className="relative mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1800px] gap-4 md:min-h-[calc(100vh-2.5rem)]">
         <aside className={`w-[250px] shrink-0 rounded-[28px] border ${glass} p-4 shadow-2xl backdrop-blur-2xl`}>
           <div className="mb-4 border-b border-white/10 pb-3">
-            <p className="text-sm uppercase tracking-[0.25em] opacity-70">SM Dashboard</p>
-            <p className="text-lg font-semibold">{dashboardName}</p>
+            <div className="flex items-center gap-2"><img src="/logo.svg" alt="Dashboard logo" className="h-7 w-7 rounded-md" /><p className="text-lg font-semibold">{dashboardName}</p></div>
           </div>
           <nav className="flex h-[calc(100%-5rem)] flex-col">
             <div className="space-y-1">
@@ -265,19 +262,38 @@ export default function App() {
                 <h2 className="text-xl font-semibold">User settings</h2>
                 <p className="mt-2 opacity-80">{user.email} • {user.role}</p>
                 <p className="mt-4 text-sm opacity-70">Edit your profile preferences and security options here.</p>
+                <div className="mt-4"><label className="mb-2 block text-sm opacity-80">Theme</label><select className="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2" value={theme} onChange={(e) => setTheme(e.target.value as ThemeMode)}><option value="light">Light</option><option value="dark">Dark</option><option value="ultra-dark">Ultra dark</option></select></div>
               </div>
             )}
 
             {tab === 'admin' && (
               <div className="space-y-4">
                 <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
-                  <h2 className="text-xl font-semibold">Invite user</h2>
+                  <h2 className="text-xl font-semibold">Admin settings • Theme</h2>
+                  <p className="mb-3 mt-2 text-sm opacity-80">Accent palette</p>
+                  <div className="mb-4 grid grid-cols-5 gap-2">
+                    {([{ key: 'blue', hex: '#3B82F6' }, { key: 'cyan', hex: '#22D3EE' }, { key: 'violet', hex: '#A78BFA' }, { key: 'emerald', hex: '#34D399' }, { key: 'rose', hex: '#FB7185' }] as const).map((c) => (
+                      <button key={c.key} onClick={() => setAccent(c.key)} className={`h-10 rounded-lg border-2 ${accent === c.key ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: c.hex }} />
+                    ))}
+                  </div>
+                  <select className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" value={theme} onChange={(e) => setTheme(e.target.value as ThemeMode)}>
+                    <option value="light">Light</option><option value="dark">Dark</option><option value="ultra-dark">Ultra dark</option>
+                  </select>
+                </div>
+
+                <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                  <h2 className="text-xl font-semibold">Admin settings • User management</h2>
                   <div className="mt-4 grid gap-2 md:grid-cols-3">
                     <input className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" placeholder="user@email.com" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
                     <select className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)}><option value="admin">Admin</option><option value="user">User</option><option value="readonly">Read-only</option></select>
                     <button className={`rounded-2xl px-3 py-2 font-semibold ${pal.button}`} onClick={createInvite}>Create invite</button>
                   </div>
                   {inviteUrl && <p className="mt-3 break-all rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-3 text-xs">{inviteUrl}</p>}
+                </div>
+
+                <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                  <h2 className="text-xl font-semibold">Admin settings • Widget management</h2>
+                  <p className="mt-2 text-sm opacity-80">Setup for the home screen widgets will be configured here.</p>
                 </div>
 
                 <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
