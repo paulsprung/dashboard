@@ -23,7 +23,8 @@ export default function App() {
   const [inviteToken, setInviteToken] = useState('');
   const [backupPassword, setBackupPassword] = useState('');
   const [step, setStep] = useState(1);
-  const [tab, setTab] = useState<'dashboard' | 'admin' | 'settings'>('dashboard');
+  const [tab, setTab] = useState<'home' | 'devices' | 'passwords' | 'drive' | 'admin' | 'settings'>('home');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<Role>('user');
@@ -100,6 +101,12 @@ export default function App() {
     if (!r.ok) return setStatus(`❌ ${await readErrorMessage(r, 'Invite failed')}`);
     setInviteUrl((await r.json() as InvitePayload).inviteUrl);
   };
+  const signOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    setUser(null);
+    setProfileMenuOpen(false);
+    setTab('home');
+  };
 
   const accentPalette: Record<Accent, { glow: string; text: string; button: string }> = {
     cyan: { glow: 'from-cyan-500/30 to-cyan-300/10', text: 'text-cyan-200', button: 'bg-cyan-400 hover:bg-cyan-300 text-slate-900' },
@@ -108,8 +115,8 @@ export default function App() {
     rose: { glow: 'from-rose-500/30 to-rose-300/10', text: 'text-rose-200', button: 'bg-rose-400 hover:bg-rose-300 text-slate-900' },
   };
   const pal = accentPalette[accent];
-  const shell = theme === 'light' ? 'bg-gradient-to-br from-purple-100 to-white text-slate-900' : `bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100`;
-  const glass = theme === 'light' ? 'bg-white/70 border-slate-200' : 'bg-white/10 border-white/10';
+  const shell = theme === 'light' ? 'bg-gradient-to-br from-slate-100 to-white text-slate-900' : `bg-gradient-to-br from-black via-slate-950 to-slate-900 text-slate-100`;
+  const glass = theme === 'light' ? 'bg-white/80 border-slate-200' : 'bg-slate-900/70 border-white/10';
 
   if (!setup) return <main className={`min-h-screen ${shell} p-8`}>Loading…</main>;
 
@@ -170,53 +177,59 @@ export default function App() {
   );
 
   const navItems = ([
-    { key: 'dashboard', icon: '⌂', label: 'Dashboard' },
+    { key: 'home', icon: '⌂', label: 'Home' },
+    { key: 'devices', icon: '◫', label: 'Devices' },
+    { key: 'passwords', icon: '⟐', label: 'Passwords' },
+    { key: 'drive', icon: '◉', label: 'Drive' },
     { key: 'admin', icon: '⚙', label: 'Admin' },
-    { key: 'settings', icon: '◉', label: 'Settings' },
   ] as const).filter((item) => item.key !== 'admin' || user.role === 'root' || user.role === 'admin');
 
   return (
-    <main className={`min-h-screen ${shell} p-6`}>
-      <div className="pointer-events-none absolute inset-0 opacity-40">
-        <div className={`absolute left-1/4 top-12 h-56 w-56 rounded-full bg-gradient-to-br ${pal.glow} blur-3xl animate-pulse`} />
-        <div className={`absolute right-1/4 bottom-16 h-72 w-72 rounded-full bg-gradient-to-br ${pal.glow} blur-3xl`} />
+    <main className={`min-h-screen ${shell} p-3 md:p-5`}>
+      <div className="pointer-events-none absolute inset-0 opacity-25">
+        <div className={`absolute left-8 top-8 h-56 w-56 rounded-full bg-gradient-to-br ${pal.glow} blur-3xl`} />
       </div>
-
-      <div className={`relative mx-auto max-w-7xl rounded-[40px] border ${glass} p-5 shadow-[0_24px_120px_rgba(0,0,0,0.45)] backdrop-blur-3xl`}>
-        <header className="mb-5 flex items-center justify-between rounded-3xl border border-white/15 bg-white/5 px-5 py-4 backdrop-blur-xl">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] opacity-60">Smart Home</p>
-            <h1 className={`text-2xl font-semibold ${pal.text}`}>{dashboardName}</h1>
+      <div className="relative mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1800px] gap-4 md:min-h-[calc(100vh-2.5rem)]">
+        <aside className={`w-[250px] shrink-0 rounded-[28px] border ${glass} p-4 shadow-2xl backdrop-blur-2xl`}>
+          <div className="mb-4 border-b border-white/10 pb-3">
+            <p className="text-sm uppercase tracking-[0.25em] opacity-70">SM Dashboard</p>
+            <p className="text-lg font-semibold">{dashboardName}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs opacity-80 md:block">{theme} • {accent}</div>
-            <button onClick={() => setTab('settings')} className="h-12 w-12 overflow-hidden rounded-full border border-white/25 bg-white/15 shadow-inner">
-              {user.avatarUrl ? <img src={user.avatarUrl} alt="avatar" /> : <span className="text-sm font-semibold">{user.email.slice(0, 1).toUpperCase()}</span>}
-            </button>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-12 gap-5">
-          <aside className="col-span-12 md:col-span-2">
-            <div className="mx-auto flex w-20 flex-row items-center justify-center gap-2 rounded-[30px] border border-white/15 bg-white/10 p-2 backdrop-blur-xl md:min-h-[640px] md:w-20 md:flex-col md:justify-start md:gap-3 md:pt-6">
+          <nav className="flex h-[calc(100%-5rem)] flex-col">
+            <div className="space-y-1">
               {navItems.map((item) => (
                 <button
                   key={item.key}
-                  aria-label={item.label}
                   onClick={() => {
-                    setTab(item.key as 'dashboard' | 'admin' | 'settings');
+                    setTab(item.key as 'home' | 'devices' | 'passwords' | 'drive' | 'admin');
+                    setProfileMenuOpen(false);
                     if (item.key === 'admin') void loadUsers();
                   }}
-                  className={`h-12 w-12 rounded-2xl text-xl transition ${tab === item.key ? `bg-white/25 ${pal.text} shadow-lg` : 'bg-white/10 hover:bg-white/15'}`}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${tab === item.key ? 'bg-white/15 text-white' : 'hover:bg-white/10'}`}
                 >
-                  {item.icon}
+                  <span className="text-base">{item.icon}</span><span>{item.label}</span>
                 </button>
               ))}
             </div>
-          </aside>
+            <div className="mt-auto">
+              <div className="relative">
+                <button onClick={() => setProfileMenuOpen((v) => !v)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/90 font-semibold text-white">{user.email.slice(0, 1).toUpperCase()}</div>
+                  <div className="min-w-0 text-left"><p className="truncate text-sm font-medium">{user.email}</p><p className="text-xs opacity-70">{user.role}</p></div>
+                </button>
+                {profileMenuOpen && (
+                  <div className="absolute bottom-12 left-0 z-20 w-full rounded-xl border border-white/15 bg-slate-900/95 p-1 shadow-xl">
+                    <button onClick={() => { setTab('settings'); setProfileMenuOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">User settings</button>
+                    <button onClick={signOut} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10">Sign out</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </nav>
+        </aside>
 
-          <section className="col-span-12 space-y-4 md:col-span-10">
-            {tab === 'dashboard' && (
+        <section className={`min-w-0 flex-1 rounded-[28px] border ${glass} p-4 md:p-6`}>
+            {tab === 'home' && (
               <div className="grid grid-cols-12 gap-4">
                 <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-8"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Living Area</p><div className="mt-4 h-64 rounded-2xl border border-white/10 bg-white/5" /></article>
                 <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-4"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Climate</p><div className="mt-4 h-64 rounded-2xl border border-white/10 bg-white/5" /></article>
@@ -226,11 +239,32 @@ export default function App() {
               </div>
             )}
 
+            {tab === 'devices' && (
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                <h2 className="text-xl font-semibold">Devices</h2>
+                <p className="mt-2 text-sm opacity-80">Manage connected rooms, sensors, and automations.</p>
+              </div>
+            )}
+
+            {tab === 'passwords' && (
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                <h2 className="text-xl font-semibold">Passwords</h2>
+                <p className="mt-2 text-sm opacity-80">Store recovery secrets and backup credentials securely.</p>
+              </div>
+            )}
+
+            {tab === 'drive' && (
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                <h2 className="text-xl font-semibold">Drive</h2>
+                <p className="mt-2 text-sm opacity-80">Browse dashboard exports and shared files.</p>
+              </div>
+            )}
+
             {tab === 'settings' && (
               <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
                 <h2 className="text-xl font-semibold">User settings</h2>
                 <p className="mt-2 opacity-80">{user.email} • {user.role}</p>
-                <p className="mt-4 text-sm opacity-70">Avatar click in top right opens this view.</p>
+                <p className="mt-4 text-sm opacity-70">Edit your profile preferences and security options here.</p>
               </div>
             )}
 
@@ -259,7 +293,6 @@ export default function App() {
               </div>
             )}
           </section>
-        </div>
       </div>
     </main>
   );
