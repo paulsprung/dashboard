@@ -109,12 +109,15 @@ const setupState: SetupState = {
   accent: 'cyan',
 };
 const execFileAsync = promisify(execFile);
-const hasPostgresEnv = Boolean(process.env.POSTGRES_DB && process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD);
+const databaseUrl = process.env.DATABASE_URL;
+const hasPostgresEnv = Boolean(databaseUrl || (process.env.POSTGRES_DB && process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD));
+const strictPersistence = process.env.STRICT_PERSISTENCE !== 'false';
 
 const runPsql = async (sql: string) => {
   if (!hasPostgresEnv) return '';
+  const connection = databaseUrl ?? `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@postgres:5432/${process.env.POSTGRES_DB}`;
   const args = [
-    `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@postgres:5432/${process.env.POSTGRES_DB}`,
+    connection,
     '-v', 'ON_ERROR_STOP=1',
     '-tAc',
     sql,
@@ -153,6 +156,7 @@ const persistState = async () => {
     await runPsql(`INSERT INTO app_state (id, data, updated_at) VALUES (1, '${escaped}'::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW();`);
   } catch (error) {
     console.error('persistState failed', error);
+    if (strictPersistence) process.exit(1);
   }
 };
 
@@ -164,6 +168,7 @@ const loadState = async () => {
     if (raw) hydrateState(JSON.parse(raw));
   } catch (error) {
     console.error('loadState failed', error);
+    if (strictPersistence) throw error;
   }
 };
 
@@ -617,6 +622,9 @@ app.get('/api/auth/health', (req, res) => {
 });
 
 const startServer = async () => {
+  if (!hasPostgresEnv && strictPersistence) {
+    throw new Error('Persistence is required but PostgreSQL env vars are missing. Set DATABASE_URL or POSTGRES_* in .env.');
+  }
   await loadState();
   const server = app.listen(port, () => {
     console.log(`Passkey auth API listening on http://localhost:${port}`);
