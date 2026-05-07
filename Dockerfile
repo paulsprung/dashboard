@@ -1,12 +1,11 @@
-FROM node:20-bookworm-slim AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-ENV NODE_OPTIONS=--max_old_space_size=2048
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
