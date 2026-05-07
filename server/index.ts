@@ -550,19 +550,14 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   user.currentChallenge = undefined;
   void persistState();
 
-  const userId = Buffer.from(user.id).toString('base64url');
-  const sessionToken = createSession(userId);
-  const isSecure = !getEffectiveOrigin(req).startsWith('http://localhost');
-  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${isSecure ? '; Secure' : ''}`);
-
-  const userId = Buffer.from(user.id).toString('base64url');
-  const sessionToken = createSession(userId);
-  const isSecure = !getEffectiveOrigin(req).startsWith('http://localhost');
-  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${isSecure ? '; Secure' : ''}`);
+  const loginUserId = Buffer.from(user.id).toString('base64url');
+  const loginSessionToken = createSession(loginUserId);
+  const shouldUseSecureCookie = !getEffectiveOrigin(req).startsWith('http://localhost');
+  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(loginSessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${shouldUseSecureCookie ? '; Secure' : ''}`);
 
   return res.json({
     verified: true,
-    user: { id: userId, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
+    user: { id: loginUserId, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
   });
 });
 
