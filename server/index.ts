@@ -4,8 +4,7 @@ import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import pg from 'pg';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -108,23 +107,11 @@ const setupState: SetupState = {
   theme: 'dark',
   accent: 'cyan',
 };
-const execFileAsync = promisify(execFile);
 const databaseUrl = process.env.DATABASE_URL;
 const hasPostgresEnv = Boolean(databaseUrl || (process.env.POSTGRES_DB && process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD));
 const strictPersistence = process.env.STRICT_PERSISTENCE !== 'false';
-
-const runPsql = async (sql: string) => {
-  if (!hasPostgresEnv) return '';
-  const connection = databaseUrl ?? `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@postgres:5432/${process.env.POSTGRES_DB}`;
-  const args = [
-    connection,
-    '-v', 'ON_ERROR_STOP=1',
-    '-tAc',
-    sql,
-  ];
-  const { stdout } = await execFileAsync('psql', args, { env: { ...process.env, PGPASSWORD: process.env.POSTGRES_PASSWORD } });
-  return stdout.trim();
-};
+const connectionString = databaseUrl ?? `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@postgres:5432/${process.env.POSTGRES_DB}`;
+const pgPool = hasPostgresEnv ? new pg.Pool({ connectionString }) : null;
 
 const serializeState = () => JSON.stringify({
   users: [...usersByEmail.values()].map((u) => ({
@@ -151,9 +138,11 @@ const hydrateState = (payload: any) => {
 const persistState = async () => {
   try {
     if (!hasPostgresEnv) return;
-    await runPsql('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());');
-    const escaped = serializeState().replace(/'/g, "''");
-    await runPsql(`INSERT INTO app_state (id, data, updated_at) VALUES (1, '${escaped}'::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW();`);
+    await pgPool!.query('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+    await pgPool!.query(
+      'INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',
+      [serializeState()],
+    );
   } catch (error) {
     console.error('persistState failed', error);
     if (strictPersistence) process.exit(1);
@@ -163,8 +152,9 @@ const persistState = async () => {
 const loadState = async () => {
   try {
     if (!hasPostgresEnv) return;
-    await runPsql('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());');
-    const raw = await runPsql("SELECT data::text FROM app_state WHERE id = 1;");
+    await pgPool!.query('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+    const row = await pgPool!.query('SELECT data FROM app_state WHERE id = 1');
+    const raw = row.rows[0]?.data ? JSON.stringify(row.rows[0].data) : '';
     if (raw) hydrateState(JSON.parse(raw));
   } catch (error) {
     console.error('loadState failed', error);
