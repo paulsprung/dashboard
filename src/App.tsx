@@ -123,7 +123,7 @@ export default function App() {
 
   if (!setup.completed) return (
     <main className={`min-h-screen ${shell} flex items-center justify-center p-8`}>
-      <section className={`w-full max-w-xl rounded-[32px] border ${glass} p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-3xl`}>
+      <section className={`w-full max-w-xl rounded-[30px] border ${glass} p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-3xl`}>
         <h1 className="text-3xl font-semibold">Setup</h1>
         <p className="mt-1 opacity-70">Root onboarding • step {step}/5</p>
         <div className="mt-5 space-y-3">
@@ -147,7 +147,7 @@ export default function App() {
 
   if (!user && inviteToken) return (
     <main className={`min-h-screen ${shell} flex items-center justify-center p-8`}>
-      <section className={`w-full max-w-md rounded-[28px] border ${glass} p-8 shadow-2xl backdrop-blur-3xl`}>
+      <section className={`w-full max-w-md rounded-[30px] border ${glass} p-8 shadow-2xl backdrop-blur-3xl`}>
         <h1 className="text-2xl font-semibold">Join dashboard</h1>
         <p className="mt-1 text-sm opacity-80">Register your passkey via invite</p>
         <input className="mt-4 w-full rounded-2xl border border-white/20 bg-white/5 px-4 py-3" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -159,7 +159,7 @@ export default function App() {
 
   if (!user) return (
     <main className={`min-h-screen ${shell} flex items-center justify-center p-8`}>
-      <section className={`w-full max-w-md rounded-[28px] border ${glass} p-8 shadow-2xl backdrop-blur-3xl`}>
+      <section className={`w-full max-w-md rounded-[30px] border ${glass} p-8 shadow-2xl backdrop-blur-3xl`}>
         <h1 className="text-3xl font-semibold">Sign in</h1>
         <p className="mt-1 text-sm opacity-80">Passkey login</p>
         <input className="mt-4 w-full rounded-2xl border border-white/20 bg-white/5 px-4 py-3" placeholder="you@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -198,7 +198,7 @@ export default function App() {
 
         <div className="grid grid-cols-12 gap-5">
           <aside className="col-span-12 md:col-span-2">
-            <div className="mx-auto flex w-20 flex-row items-center justify-center gap-2 rounded-[28px] border border-white/15 bg-white/10 p-2 backdrop-blur-xl md:min-h-[560px] md:w-20 md:flex-col md:justify-start md:gap-3 md:pt-6">
+            <div className="mx-auto flex w-20 flex-row items-center justify-center gap-2 rounded-[30px] border border-white/15 bg-white/10 p-2 backdrop-blur-xl md:min-h-[640px] md:w-20 md:flex-col md:justify-start md:gap-3 md:pt-6">
               {navItems.map((item) => (
                 <button
                   key={item.key}
@@ -207,7 +207,7 @@ export default function App() {
                     setTab(item.key as 'dashboard' | 'admin' | 'settings');
                     if (item.key === 'admin') void loadUsers();
                   }}
-                  className={`h-12 w-12 rounded-2xl text-xl transition ${tab === item.key ? `bg-white/25 ${pal.text} shadow-lg` : 'bg-white/10 hover:bg-white/20'}`}
+                  className={`h-12 w-12 rounded-2xl text-xl transition ${tab === item.key ? `bg-white/25 ${pal.text} shadow-lg` : 'bg-white/10 hover:bg-white/15'}`}
                 >
                   {item.icon}
                 </button>
@@ -215,16 +215,14 @@ export default function App() {
             </div>
           </aside>
 
-          <section className="col-span-12 md:col-span-10">
+          <section className="col-span-12 space-y-4 md:col-span-10">
             {tab === 'dashboard' && (
-              <div className="grid gap-4 md:grid-cols-3">
-                {['Living room', 'Climate', 'Security', 'Energy', 'Scenes', 'Devices'].map((k, index) => (
-                  <article key={k} className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/15">
-                    <p className="text-xs uppercase tracking-[0.2em] opacity-60">{k}</p>
-                    <p className="mt-3 text-3xl font-semibold">{(index + 1) * 12}%</p>
-                    <div className="mt-4 h-2 rounded-full bg-white/20"><div className={`h-2 rounded-full bg-gradient-to-r ${pal.glow}`} style={{ width: `${40 + index * 8}%` }} /></div>
-                  </article>
-                ))}
+              <div className="grid grid-cols-12 gap-4">
+                <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-8"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Living Area</p><div className="mt-4 h-64 rounded-2xl border border-white/10 bg-white/5" /></article>
+                <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-4"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Climate</p><div className="mt-4 h-64 rounded-2xl border border-white/10 bg-white/5" /></article>
+                <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-4"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Energy</p><div className="mt-3 h-36 rounded-2xl border border-white/10 bg-white/5" /></article>
+                <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-4"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Security</p><div className="mt-3 h-36 rounded-2xl border border-white/10 bg-white/5" /></article>
+                <article className="col-span-12 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl md:col-span-4"><p className="text-xs uppercase tracking-[0.2em] opacity-60">Scenes</p><div className="mt-3 h-36 rounded-2xl border border-white/10 bg-white/5" /></article>
               </div>
             )}
 
@@ -242,7 +240,7 @@ export default function App() {
                   <h2 className="text-xl font-semibold">Invite user</h2>
                   <div className="mt-4 grid gap-2 md:grid-cols-3">
                     <input className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" placeholder="user@email.com" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
-                    <select className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)}><option value="admin">Admin</option><option value="user">User</option><option value="readonly">Readonly</option></select>
+                    <select className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)}><option value="admin">Admin</option><option value="user">User</option><option value="readonly">Read-only</option></select>
                     <button className={`rounded-2xl px-3 py-2 font-semibold ${pal.button}`} onClick={createInvite}>Create invite</button>
                   </div>
                   {inviteUrl && <p className="mt-3 break-all rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-3 text-xs">{inviteUrl}</p>}
