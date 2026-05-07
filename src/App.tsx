@@ -169,26 +169,101 @@ export default function App() {
     </main>
   );
 
+  const navItems = ([
+    { key: 'dashboard', icon: '⌂', label: 'Dashboard' },
+    { key: 'admin', icon: '⚙', label: 'Admin' },
+    { key: 'settings', icon: '◉', label: 'Settings' },
+  ] as const).filter((item) => item.key !== 'admin' || user.role === 'root' || user.role === 'admin');
+
   return (
     <main className={`min-h-screen ${shell} p-6`}>
-      <div className={`mx-auto max-w-7xl rounded-[36px] border ${glass} p-4 shadow-[0_20px_100px_rgba(0,0,0,0.35)] backdrop-blur-3xl`}>
-        <header className="mb-4 flex items-center justify-between rounded-2xl border border-white/15 bg-white/5 px-4 py-3">
-          <h1 className={`text-2xl font-semibold ${pal.text}`}>{dashboardName}</h1>
-          <button onClick={() => setTab('settings')} className="h-11 w-11 overflow-hidden rounded-full border border-white/20 bg-white/10">{user.avatarUrl ? <img src={user.avatarUrl} alt="avatar" /> : <span>{user.email.slice(0, 1).toUpperCase()}</span>}</button>
+      <div className="pointer-events-none absolute inset-0 opacity-40">
+        <div className={`absolute left-1/4 top-12 h-56 w-56 rounded-full bg-gradient-to-br ${pal.glow} blur-3xl animate-pulse`} />
+        <div className={`absolute right-1/4 bottom-16 h-72 w-72 rounded-full bg-gradient-to-br ${pal.glow} blur-3xl`} />
+      </div>
+
+      <div className={`relative mx-auto max-w-7xl rounded-[40px] border ${glass} p-5 shadow-[0_24px_120px_rgba(0,0,0,0.45)] backdrop-blur-3xl`}>
+        <header className="mb-5 flex items-center justify-between rounded-3xl border border-white/15 bg-white/5 px-5 py-4 backdrop-blur-xl">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] opacity-60">Smart Home</p>
+            <h1 className={`text-2xl font-semibold ${pal.text}`}>{dashboardName}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs opacity-80 md:block">{theme} • {accent}</div>
+            <button onClick={() => setTab('settings')} className="h-12 w-12 overflow-hidden rounded-full border border-white/25 bg-white/15 shadow-inner">
+              {user.avatarUrl ? <img src={user.avatarUrl} alt="avatar" /> : <span className="text-sm font-semibold">{user.email.slice(0, 1).toUpperCase()}</span>}
+            </button>
+          </div>
         </header>
-        <div className="grid grid-cols-12 gap-4">
-          <aside className="col-span-12 rounded-2xl border border-white/15 bg-white/5 p-3 md:col-span-2">
-            {(['dashboard', 'admin', 'settings'] as const).filter((t) => t !== 'admin' || user.role === 'root' || user.role === 'admin').map((t) => (
-              <button key={t} onClick={() => { setTab(t); if (t === 'admin') void loadUsers(); }} className={`mb-2 w-full rounded-xl px-3 py-2 text-left ${tab === t ? 'bg-white/20' : 'hover:bg-white/10'}`}>{t[0].toUpperCase() + t.slice(1)}</button>
-            ))}
+
+        <div className="grid grid-cols-12 gap-5">
+          <aside className="col-span-12 md:col-span-2">
+            <div className="mx-auto flex w-20 flex-row items-center justify-center gap-2 rounded-[28px] border border-white/15 bg-white/10 p-2 backdrop-blur-xl md:min-h-[560px] md:w-20 md:flex-col md:justify-start md:gap-3 md:pt-6">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  aria-label={item.label}
+                  onClick={() => {
+                    setTab(item.key as 'dashboard' | 'admin' | 'settings');
+                    if (item.key === 'admin') void loadUsers();
+                  }}
+                  className={`h-12 w-12 rounded-2xl text-xl transition ${tab === item.key ? `bg-white/25 ${pal.text} shadow-lg` : 'bg-white/10 hover:bg-white/20'}`}
+                >
+                  {item.icon}
+                </button>
+              ))}
+            </div>
           </aside>
+
           <section className="col-span-12 md:col-span-10">
-            {tab === 'dashboard' && <div className="grid gap-4 md:grid-cols-3">{['Living room', 'Climate', 'Security', 'Energy', 'Scenes', 'Devices'].map((k) => <article key={k} className="rounded-2xl border border-white/15 bg-white/10 p-4"><p className="text-sm opacity-70">{k}</p><p className="mt-2 text-2xl font-semibold">Demo</p></article>)}</div>}
-            {tab === 'settings' && <div className="rounded-2xl border border-white/15 bg-white/10 p-5"><h2 className="text-xl font-semibold">User settings</h2><p className="mt-2 opacity-80">{user.email} • {user.role}</p></div>}
-            {tab === 'admin' && <div className="space-y-4"><div className="rounded-2xl border border-white/15 bg-white/10 p-5"><h2 className="text-xl font-semibold">Invite user</h2><div className="mt-3 grid gap-2 md:grid-cols-3"><input className="rounded-xl border border-white/20 bg-white/5 px-3 py-2" placeholder="user@email.com" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} /><select className="rounded-xl border border-white/20 bg-white/5 px-3 py-2" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)}><option value="admin">Admin</option><option value="user">User</option><option value="readonly">Readonly</option></select><button className={`rounded-xl px-3 py-2 font-semibold ${pal.button}`} onClick={createInvite}>Create invite</button></div>{inviteUrl && <p className="mt-3 break-all rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-2 text-xs">{inviteUrl}</p>}</div><div className="rounded-2xl border border-white/15 bg-white/10 p-5"><h2 className="text-xl font-semibold">Users</h2><ul className="mt-3 space-y-2">{adminUsers.map((u) => <li key={u.id} className="rounded-xl border border-white/10 bg-white/5 p-2 text-sm">{u.email} • {u.role} • {u.hasPasskey ? 'passkey' : 'no passkey'}</li>)}</ul></div></div>}
+            {tab === 'dashboard' && (
+              <div className="grid gap-4 md:grid-cols-3">
+                {['Living room', 'Climate', 'Security', 'Energy', 'Scenes', 'Devices'].map((k, index) => (
+                  <article key={k} className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/15">
+                    <p className="text-xs uppercase tracking-[0.2em] opacity-60">{k}</p>
+                    <p className="mt-3 text-3xl font-semibold">{(index + 1) * 12}%</p>
+                    <div className="mt-4 h-2 rounded-full bg-white/20"><div className={`h-2 rounded-full bg-gradient-to-r ${pal.glow}`} style={{ width: `${40 + index * 8}%` }} /></div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {tab === 'settings' && (
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                <h2 className="text-xl font-semibold">User settings</h2>
+                <p className="mt-2 opacity-80">{user.email} • {user.role}</p>
+                <p className="mt-4 text-sm opacity-70">Avatar click in top right opens this view.</p>
+              </div>
+            )}
+
+            {tab === 'admin' && (
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                  <h2 className="text-xl font-semibold">Invite user</h2>
+                  <div className="mt-4 grid gap-2 md:grid-cols-3">
+                    <input className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" placeholder="user@email.com" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                    <select className="rounded-2xl border border-white/20 bg-white/5 px-3 py-2" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)}><option value="admin">Admin</option><option value="user">User</option><option value="readonly">Readonly</option></select>
+                    <button className={`rounded-2xl px-3 py-2 font-semibold ${pal.button}`} onClick={createInvite}>Create invite</button>
+                  </div>
+                  {inviteUrl && <p className="mt-3 break-all rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-3 text-xs">{inviteUrl}</p>}
+                </div>
+
+                <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
+                  <h2 className="text-xl font-semibold">Users</h2>
+                  <ul className="mt-3 space-y-2">
+                    {adminUsers.map((u) => (
+                      <li key={u.id} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm">
+                        {u.email} • {u.role} • {u.hasPasskey ? 'passkey' : 'no passkey'}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>
     </main>
   );
+
 }
