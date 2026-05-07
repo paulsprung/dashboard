@@ -4,6 +4,8 @@ import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -106,6 +108,64 @@ const setupState: SetupState = {
   theme: 'dark',
   accent: 'cyan',
 };
+const execFileAsync = promisify(execFile);
+const hasPostgresEnv = Boolean(process.env.POSTGRES_DB && process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD);
+
+const runPsql = async (sql: string) => {
+  if (!hasPostgresEnv) return '';
+  const args = [
+    `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@postgres:5432/${process.env.POSTGRES_DB}`,
+    '-v', 'ON_ERROR_STOP=1',
+    '-tAc',
+    sql,
+  ];
+  const { stdout } = await execFileAsync('psql', args, { env: { ...process.env, PGPASSWORD: process.env.POSTGRES_PASSWORD } });
+  return stdout.trim();
+};
+
+const serializeState = () => JSON.stringify({
+  users: [...usersByEmail.values()].map((u) => ({
+    ...u,
+    id: Buffer.from(u.id).toString('base64url'),
+    authenticators: u.authenticators.map((a) => ({ ...a, credentialPublicKey: Buffer.from(a.credentialPublicKey).toString('base64') })),
+  })),
+  sessions: [...sessions.entries()],
+  invites: [...invites.entries()],
+  setupState,
+});
+
+const hydrateState = (payload: any) => {
+  if (!payload) return;
+  usersByEmail.clear();
+  sessions.clear();
+  invites.clear();
+  for (const u of payload.users ?? []) usersByEmail.set(u.email, { ...u, id: Uint8Array.from(Buffer.from(u.id, 'base64url')), authenticators: (u.authenticators ?? []).map((a: any) => ({ ...a, credentialPublicKey: Uint8Array.from(Buffer.from(a.credentialPublicKey, 'base64')) })) });
+  for (const [k, v] of payload.sessions ?? []) sessions.set(k, v);
+  for (const [k, v] of payload.invites ?? []) invites.set(k, v);
+  Object.assign(setupState, payload.setupState ?? {});
+};
+
+const persistState = async () => {
+  try {
+    if (!hasPostgresEnv) return;
+    await runPsql('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());');
+    const escaped = serializeState().replace(/'/g, "''");
+    await runPsql(`INSERT INTO app_state (id, data, updated_at) VALUES (1, '${escaped}'::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW();`);
+  } catch (error) {
+    console.error('persistState failed', error);
+  }
+};
+
+const loadState = async () => {
+  try {
+    if (!hasPostgresEnv) return;
+    await runPsql('CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());');
+    const raw = await runPsql("SELECT data::text FROM app_state WHERE id = 1;");
+    if (raw) hydrateState(JSON.parse(raw));
+  } catch (error) {
+    console.error('loadState failed', error);
+  }
+};
 
 const generateBackupPassword = () => crypto.randomBytes(18).toString('base64url');
 
@@ -123,6 +183,7 @@ const parseCookies = (cookieHeader?: string): Record<string, string> => {
 const createSession = (userId: string) => {
   const token = crypto.randomBytes(32).toString('base64url');
   sessions.set(token, userId);
+  void persistState();
   return token;
 };
 
@@ -153,6 +214,7 @@ const getOrCreateUser = (email: string): UserRecord => {
     authenticators: [],
   };
   usersByEmail.set(email, created);
+  void persistState();
   return created;
 };
 
@@ -169,6 +231,7 @@ app.post('/api/setup/start', (req, res) => {
   setupState.rootEmail = rootEmail.trim().toLowerCase();
   setupState.backupPasswordAccepted = false;
   getOrCreateUser(setupState.rootEmail);
+  void persistState();
 
   return res.json({ ok: true });
 });
@@ -183,6 +246,7 @@ app.post('/api/setup/generate-backup-password', (req, res) => {
 
   setupState.rootBackupPassword = generateBackupPassword();
   setupState.backupPasswordAccepted = false;
+  void persistState();
   return res.json({ rootBackupPassword: setupState.rootBackupPassword });
 });
 
@@ -191,6 +255,7 @@ app.post('/api/setup/acknowledge-backup-password', (req, res) => {
   const { accepted } = req.body as { accepted?: boolean };
   if (!accepted) return res.status(400).json({ error: 'Backup password must be acknowledged' });
   setupState.backupPasswordAccepted = true;
+  void persistState();
   return res.json({ ok: true });
 });
 
@@ -222,6 +287,7 @@ app.post('/api/setup/complete', (req, res) => {
   setupState.theme = body.theme === 'light' ? 'light' : 'dark';
   setupState.accent = body.accent && ['cyan', 'violet', 'emerald', 'rose'].includes(body.accent) ? body.accent : 'cyan';
   setupState.completed = true;
+  void persistState();
 
   return res.json({ ok: true });
 });
@@ -249,6 +315,7 @@ app.post('/api/setup/root/registration-options', async (req, res) => {
   });
 
   user.currentChallenge = options.challenge;
+  void persistState();
   return res.json(options);
 });
 
@@ -289,6 +356,7 @@ app.post('/api/setup/root/verify-registration', async (req, res) => {
     });
   }
   user.currentChallenge = undefined;
+  void persistState();
   return res.json({ verified: true });
 });
 
@@ -324,6 +392,7 @@ app.post('/api/auth/passkey/registration-options', async (req, res) => {
   });
 
   user.currentChallenge = options.challenge;
+  void persistState();
   return res.json(options);
 });
 
@@ -389,6 +458,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
   }
 
   user.currentChallenge = undefined;
+  void persistState();
   return res.json({ verified: true });
 });
 
@@ -478,6 +548,12 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
 
   authenticator.counter = verification.authenticationInfo.newCounter;
   user.currentChallenge = undefined;
+  void persistState();
+
+  const userId = Buffer.from(user.id).toString('base64url');
+  const sessionToken = createSession(userId);
+  const isSecure = !getEffectiveOrigin(req).startsWith('http://localhost');
+  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${isSecure ? '; Secure' : ''}`);
 
   const userId = Buffer.from(user.id).toString('base64url');
   const sessionToken = createSession(userId);
@@ -501,6 +577,7 @@ app.post('/api/auth/logout', (req, res) => {
   const cookies = parseCookies(req.headers.cookie);
   const token = cookies[sessionCookieName];
   if (token) sessions.delete(token);
+  void persistState();
   const isSecure = !getEffectiveOrigin(req).startsWith('http://localhost');
   res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure ? '; Secure' : ''}`);
   return res.json({ ok: true });
@@ -534,6 +611,7 @@ app.post('/api/admin/invites', (req, res) => {
   const safeRole: UserRole = role && ['admin', 'user', 'readonly'].includes(role) ? role : 'user';
   const token = crypto.randomBytes(24).toString('base64url');
   invites.set(token, { email: normalizedEmail, role: safeRole, expiresAt: Date.now() + Math.max(5, ttlMinutes ?? 60) * 60_000, used: false });
+  void persistState();
   return res.json({ ok: true, token, inviteUrl: `${getEffectiveOrigin(req)}/?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(normalizedEmail)}` });
 });
 
@@ -543,16 +621,21 @@ app.get('/api/auth/health', (req, res) => {
   res.json({ ok: true, rpID: effectiveRPID, rpName, origin: effectiveOrigin, message: 'Passkey auth server is running' });
 });
 
-const server = app.listen(port, () => {
-  console.log(`Passkey auth API listening on http://localhost:${port}`);
-});
+const startServer = async () => {
+  await loadState();
+  const server = app.listen(port, () => {
+    console.log(`Passkey auth API listening on http://localhost:${port}`);
+  });
 
-server.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${port} is already in use. Stop the other process or set PORT to a free port.`);
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use. Stop the other process or set PORT to a free port.`);
+      process.exit(1);
+    }
+
+    console.error('Server failed to start', error);
     process.exit(1);
-  }
+  });
+};
 
-  console.error('Server failed to start', error);
-  process.exit(1);
-});
+void startServer();
