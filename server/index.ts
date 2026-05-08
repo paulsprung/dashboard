@@ -361,6 +361,9 @@ app.post('/api/setup/complete', (req, res) => {
   if (!root || root.authenticators.length === 0) {
     return res.status(400).json({ error: 'Register a root passkey first' });
   }
+  if (!setupState.backupPasswordAccepted) {
+    return res.status(400).json({ error: 'Backup password must be acknowledged first' });
+  }
   const rawName = body.dashboardName?.trim() ?? '';
   setupState.dashboardName = rawName.length > 0 && rawName.length <= 80 ? rawName : setupState.dashboardName;
   setupState.theme = (['light', 'dark', 'ultra-dark'] as const).includes(body.theme as any) ? body.theme as SetupState['theme'] : 'dark';

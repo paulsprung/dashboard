@@ -230,6 +230,7 @@ function SetupWizard({ onDone, initStep }: { onDone: () => void; initStep: numbe
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [accent, setAccent] = useState('#007AFF');
   const [backupPassword, setBackupPassword] = useState('');
+  const [backupLoading, setBackupLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -259,19 +260,19 @@ function SetupWizard({ onDone, initStep }: { onDone: () => void; initStep: numbe
     go(3);
   });
 
-  const generateBackup = () => run(async () => {
-    const r = await fetch('/api/setup/generate-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler beim Generieren')}`);
-    setBackupPassword((await r.json() as { rootBackupPassword: string }).rootBackupPassword);
-  });
+  const generateBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const r = await fetch('/api/setup/generate-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+      if (!r.ok) setStatus(`✗ ${await readErr(r, 'Fehler beim Generieren')}`);
+      else setBackupPassword((await r.json() as { rootBackupPassword: string }).rootBackupPassword);
+    } catch { setStatus('✗ Netzwerkfehler.'); }
+    setBackupLoading(false);
+  };
+
+  useEffect(() => { if (step === 3 && !backupPassword) void generateBackup(); }, [step]);
 
   const confirmBackup = () => run(async () => {
-    const r = await fetch('/api/setup/acknowledge-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accepted: true }) });
-    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler')}`);
-    go(4);
-  });
-
-  const skipBackup = () => run(async () => {
     const r = await fetch('/api/setup/acknowledge-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accepted: true }) });
     if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler')}`);
     go(4);
@@ -362,35 +363,40 @@ function SetupWizard({ onDone, initStep }: { onDone: () => void; initStep: numbe
             ) : step === 3 ? (
               <div className="space-y-5">
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Für den Fall, dass du deinen Passkey verlierst. Du kannst diesen Schritt überspringen.</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
                 </div>
-                {backupPassword ? (
+                {backupLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Spinner size={24} color={accent} />
+                  </div>
+                ) : backupPassword ? (
                   <div className="space-y-4">
-                    <div className={`rounded-xl border p-4 ${t.inputBg} ${t.border}`}>
-                      <p className={`mb-2 text-xs font-medium ${t.muted}`}>Backup-Code — nur einmal sichtbar</p>
-                      <p className="font-mono text-sm tracking-widest break-all select-all" style={{ color: accent }}>
+                    <div className={`rounded-xl border p-4 space-y-2 ${t.inputBg} ${t.border}`}>
+                      <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
+                      <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed" style={{ color: accent }}>
                         {backupPassword}
                       </p>
                     </div>
-                    <p className={`text-xs ${t.muted}`}>⚠ Speichere diesen Code an einem sicheren Ort (Passwortmanager, Tresor). Er wird nicht noch einmal angezeigt.</p>
+                    <div className={`rounded-xl p-3 text-xs ${t.muted} space-y-1`} style={{ backgroundColor: `${accent}12` }}>
+                      <p style={{ color: accent }} className="font-medium">So aufbewahren:</p>
+                      <p>• Passwortmanager (empfohlen)</p>
+                      <p>• Sicher ausgedruckt und eingeschlossen</p>
+                      <p>• Verschlüsseltes Notizdokument</p>
+                    </div>
                     <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
-                      Gespeichert — weiter
+                      Ich habe den Code gesichert
                     </Btn>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Btn accent={accent} className="w-full" onClick={generateBackup} loading={loading}>
-                      Backup-Code generieren
+                    <StatusMsg msg={status} t={t} />
+                    <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
+                      Erneut versuchen
                     </Btn>
-                    <button onClick={skipBackup} disabled={loading}
-                      className={`w-full rounded-xl px-4 py-2.5 text-sm transition-all ${t.navHover} ${t.muted}`}>
-                      Überspringen
-                    </button>
-                    <p className={`text-center text-xs ${t.muted}`}>Ohne Backup-Code kannst du bei Passkey-Verlust nicht mehr einloggen.</p>
                   </div>
                 )}
-                <StatusMsg msg={status} t={t} />
+                {backupPassword && <StatusMsg msg={status} t={t} />}
               </div>
             ) : step === 4 ? (
               <div className="space-y-5">
