@@ -23,7 +23,7 @@ const APPLE_COLORS = [
 function tok(theme: ThemeMode) {
   const t = {
     light: {
-      page:       'bg-[#F2F2F7]',
+      page:       'bg-[#F2F2F7] text-[#1D1D1F]',
       card:       'bg-white/90',
       border:     'border-black/[0.07]',
       text:       'text-[#1D1D1F]',
@@ -39,7 +39,7 @@ function tok(theme: ThemeMode) {
       shadowSm:   '0 1px 4px rgba(0,0,0,0.06)',
     },
     dark: {
-      page:       'bg-[#1C1C1E]',
+      page:       'bg-[#1C1C1E] text-[#F5F5F7]',
       card:       'bg-[#2C2C2E]/95',
       border:     'border-white/[0.08]',
       text:       'text-[#F5F5F7]',
@@ -55,18 +55,18 @@ function tok(theme: ThemeMode) {
       shadowSm:   '0 1px 4px rgba(0,0,0,0.2)',
     },
     'ultra-dark': {
-      page:       'bg-black',
-      card:       'bg-[#111111]/98',
-      border:     'border-white/[0.05]',
+      page:       'bg-black text-[#F5F5F7]',
+      card:       'bg-[#111111]',
+      border:     'border-white/[0.07]',
       text:       'text-[#F5F5F7]',
-      muted:      'text-[#48484A]',
+      muted:      'text-[#6E6E73]',
       inputBg:    'bg-[#1C1C1E]',
       inputText:  'text-[#F5F5F7] placeholder:text-[#48484A]',
-      inputBorder:'border border-transparent',
-      divider:    'border-white/[0.05]',
-      navHover:   'hover:bg-white/[0.04]',
-      navActive:  'bg-white/[0.07] font-medium',
-      userCard:   'bg-white/[0.03]',
+      inputBorder:'border border-white/[0.06]',
+      divider:    'border-white/[0.06]',
+      navHover:   'hover:bg-white/[0.06]',
+      navActive:  'bg-white/[0.1] font-medium',
+      userCard:   'bg-white/[0.04]',
       shadow:     '0 2px 20px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.5)',
       shadowSm:   '0 1px 4px rgba(0,0,0,0.4)',
     },
@@ -106,7 +106,7 @@ function Btn({
   disabled?: boolean; variant?: 'primary' | 'secondary' | 'ghost';
   accent: string; className?: string;
 }) {
-  const base = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-40 select-none cursor-pointer';
+  const base = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150 hover:brightness-105 active:scale-[0.97] active:brightness-95 disabled:opacity-40 select-none cursor-pointer';
   if (variant === 'primary') return (
     <button onClick={onClick} disabled={disabled || loading}
       className={`${base} text-white ${className}`}
@@ -116,14 +116,14 @@ function Btn({
   );
   if (variant === 'secondary') return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} bg-white/10 ${className}`}>
-      {loading ? <Spinner size={16} /> : children}
+      className={`${base} text-[#F5F5F7] bg-white/10 border border-white/[0.1] ${className}`}>
+      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
     </button>
   );
   return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} opacity-60 hover:opacity-100 ${className}`}>
-      {loading ? <Spinner size={16} /> : children}
+      className={`${base} text-[#F5F5F7] opacity-50 hover:opacity-90 ${className}`}>
+      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
     </button>
   );
 }
@@ -155,16 +155,28 @@ function Input({
   );
 }
 
-function Card({ children, className = '', t }: {
-  children: React.ReactNode; className?: string; t: ReturnType<typeof tok>;
+function Card({ children, className = '', t, accent }: {
+  children: React.ReactNode; className?: string;
+  t: ReturnType<typeof tok>; accent?: string;
 }) {
   return (
-    <div className={`rounded-2xl border backdrop-blur-xl ${t.card} ${t.border} ${className}`}
-      style={{ boxShadow: t.shadow }}>
+    <div className={`rounded-2xl border backdrop-blur-xl transition-shadow duration-300 ${t.card} ${t.border} ${className}`}
+      style={{
+        boxShadow: accent
+          ? `${t.shadow}, inset 0 1px 0 0 ${accent}18, 0 0 40px 0 ${accent}0A`
+          : t.shadow,
+        borderColor: accent ? `${accent}20` : undefined,
+      }}>
       {children}
     </div>
   );
 }
+
+// Accent-tinted panel style for inner content areas
+const panelStyle = (accent: string, t: ReturnType<typeof tok>) => ({
+  boxShadow: `inset 0 1px 0 0 ${accent}15`,
+  borderColor: `${accent}18`,
+});
 
 function ColorPicker({ value, onChange, t }: {
   value: string; onChange: (hex: string) => void; t: ReturnType<typeof tok>;
@@ -324,7 +336,7 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
 
         {/* Card */}
         <div key={animKey} className="animate-slide-up">
-          <Card t={t} className="p-7">
+          <Card t={t} accent={accent} className="p-7">
             {done ? (
               <div className="flex flex-col items-center gap-4 py-4">
                 <SuccessCheck color={accent} />
@@ -456,7 +468,7 @@ function AuthPage({ title, sub, children, accent, t }: {
           <h1 className={`text-2xl font-semibold tracking-tight ${t.text}`}>{title}</h1>
           <p className={`mt-1 text-sm ${t.muted}`}>{sub}</p>
         </div>
-        <Card t={t} className="p-7">{children}</Card>
+        <Card t={t} accent={accent} className="p-7">{children}</Card>
       </div>
     </div>
   );
@@ -625,13 +637,17 @@ function Dashboard({ user, setup, onSignOut }: {
   };
 
   return (
-    <div className={`min-h-screen ${t.page} p-3 md:p-4 animate-fade-in`}
+    <div className={`min-h-screen transition-colors duration-300 ${t.page} p-3 md:p-4 animate-fade-in`}
       style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}>
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] gap-3 md:gap-4">
 
         {/* Sidebar */}
         <aside className={`flex w-[220px] shrink-0 flex-col rounded-2xl border backdrop-blur-xl
-          ${t.card} ${t.border}`} style={{ boxShadow: t.shadowSm }}>
+          transition-shadow duration-300 ${t.card} ${t.border}`}
+          style={{
+            boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}15`,
+            borderColor: `${accent}1A`,
+          }}>
           <div className={`border-b px-4 py-4 ${t.divider}`}>
             <div className="flex items-center gap-2.5">
               <img src="/logo.svg" alt="Logo" className="h-8 w-8 rounded-xl"
@@ -685,7 +701,11 @@ function Dashboard({ user, setup, onSignOut }: {
 
         {/* Content */}
         <main className={`min-w-0 flex-1 rounded-2xl border backdrop-blur-xl p-5 md:p-6
-          ${t.card} ${t.border}`} style={{ boxShadow: t.shadowSm }}>
+          transition-shadow duration-300 ${t.card} ${t.border}`}
+          style={{
+            boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}12`,
+            borderColor: `${accent}18`,
+          }}>
 
           {tab === 'home' && (
             <div className="animate-slide-right space-y-4">
@@ -694,26 +714,20 @@ function Dashboard({ user, setup, onSignOut }: {
                 <p className={`text-sm ${t.muted}`}>Guten Tag, {user.email.split('@')[0]}</p>
               </div>
               <div className="grid grid-cols-12 gap-4">
-                <div className={`col-span-12 rounded-2xl border p-5 md:col-span-8 ${t.border} ${t.inputBg}`}>
-                  <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`}>Wohnzimmer</p>
-                  <Placeholder label="Gerätesteuerung" className="mt-4 h-56" />
-                </div>
-                <div className={`col-span-12 rounded-2xl border p-5 md:col-span-4 ${t.border} ${t.inputBg}`}>
-                  <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`}>Klima</p>
-                  <Placeholder label="Temperatur" className="mt-4 h-56" />
-                </div>
-                <div className={`col-span-12 rounded-2xl border p-5 md:col-span-4 ${t.border} ${t.inputBg}`}>
-                  <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`}>Energie</p>
-                  <Placeholder label="Verbrauch" className="mt-3 h-32" />
-                </div>
-                <div className={`col-span-12 rounded-2xl border p-5 md:col-span-4 ${t.border} ${t.inputBg}`}>
-                  <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`}>Sicherheit</p>
-                  <Placeholder label="Kameras & Schlösser" className="mt-3 h-32" />
-                </div>
-                <div className={`col-span-12 rounded-2xl border p-5 md:col-span-4 ${t.border} ${t.inputBg}`}>
-                  <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`}>Szenen</p>
-                  <Placeholder label="Automationen" className="mt-3 h-32" />
-                </div>
+                {[
+                  { span: 8, label: 'Wohnzimmer', ph: 'Gerätesteuerung', h: 'h-56' },
+                  { span: 4, label: 'Klima',       ph: 'Temperatur',      h: 'h-56' },
+                  { span: 4, label: 'Energie',     ph: 'Verbrauch',       h: 'h-32' },
+                  { span: 4, label: 'Sicherheit',  ph: 'Kameras & Schlösser', h: 'h-32' },
+                  { span: 4, label: 'Szenen',      ph: 'Automationen',    h: 'h-32' },
+                ].map(({ span, label, ph, h }, i) => (
+                  <div key={label}
+                    className={`col-span-12 rounded-2xl border p-5 transition-all duration-200 hover:-translate-y-px md:col-span-${span} ${t.border} ${t.inputBg}`}
+                    style={{ ...panelStyle(accent, t), animationDelay: `${i * 40}ms` }}>
+                    <p className={`text-xs font-medium uppercase tracking-widest ${t.muted}`} style={{ color: `${accent}CC` }}>{label}</p>
+                    <Placeholder label={ph} className={`mt-4 ${h}`} />
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -722,7 +736,9 @@ function Dashboard({ user, setup, onSignOut }: {
             <div className="animate-slide-right">
               <h1 className={`text-xl font-semibold ${t.text}`}>Geräte</h1>
               <p className={`mt-1 text-sm ${t.muted}`}>Verbundene Geräte, Räume und Automationen.</p>
-              <Placeholder label="Geräteverwaltung" className="mt-6 h-72" />
+              <div className={`mt-6 rounded-2xl border p-6 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+                <Placeholder label="Geräteverwaltung" className="h-72" />
+              </div>
             </div>
           )}
 
@@ -730,7 +746,9 @@ function Dashboard({ user, setup, onSignOut }: {
             <div className="animate-slide-right">
               <h1 className={`text-xl font-semibold ${t.text}`}>Passwörter</h1>
               <p className={`mt-1 text-sm ${t.muted}`}>Backup-Codes und Zugangsdaten sicher speichern.</p>
-              <Placeholder label="Passwortverwaltung" className="mt-6 h-72" />
+              <div className={`mt-6 rounded-2xl border p-6 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+                <Placeholder label="Passwortverwaltung" className="h-72" />
+              </div>
             </div>
           )}
 
@@ -738,30 +756,34 @@ function Dashboard({ user, setup, onSignOut }: {
             <div className="animate-slide-right">
               <h1 className={`text-xl font-semibold ${t.text}`}>Drive</h1>
               <p className={`mt-1 text-sm ${t.muted}`}>Dashboard-Exporte und freigegebene Dateien.</p>
-              <Placeholder label="Dateiverwaltung" className="mt-6 h-72" />
+              <div className={`mt-6 rounded-2xl border p-6 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+                <Placeholder label="Dateiverwaltung" className="h-72" />
+              </div>
             </div>
           )}
 
           {tab === 'settings' && (
             <div className="animate-slide-right space-y-6 max-w-lg">
               <h1 className={`text-xl font-semibold ${t.text}`}>Einstellungen</h1>
-              <div className="space-y-1.5">
-                <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
-                    <button key={m} onClick={() => setTheme(m)}
-                      className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
-                        theme === m ? t.border : `${t.border} opacity-40 hover:opacity-70`
-                      }`}
-                      style={theme === m ? { borderColor: accent, color: accent } : {}}>
-                      {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
-                    </button>
-                  ))}
+              <div className={`rounded-2xl border p-5 space-y-5 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+                <div className="space-y-1.5">
+                  <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
+                      <button key={m} onClick={() => setTheme(m)}
+                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                          theme === m ? '' : `opacity-40 hover:opacity-70`
+                        } ${t.border}`}
+                        style={theme === m ? { borderColor: accent, color: accent, backgroundColor: `${accent}12` } : {}}>
+                        {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
-                <ColorPicker value={accent} onChange={setAccent} t={t} />
+                <div className="space-y-1.5">
+                  <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
+                  <ColorPicker value={accent} onChange={setAccent} t={t} />
+                </div>
               </div>
             </div>
           )}
@@ -771,7 +793,7 @@ function Dashboard({ user, setup, onSignOut }: {
               <h1 className={`text-xl font-semibold ${t.text}`}>Administration</h1>
 
               {/* Invite */}
-              <div className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`}>
+              <div className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
                 <div>
                   <h2 className={`font-semibold ${t.text}`}>Nutzer einladen</h2>
                   <p className={`mt-0.5 text-sm ${t.muted}`}>Generiere einen Einladungslink.</p>
@@ -794,7 +816,7 @@ function Dashboard({ user, setup, onSignOut }: {
                 </div>
                 {status && <StatusMsg msg={status} t={t} />}
                 {inviteUrl && (
-                  <div className={`rounded-xl border p-3 ${t.border}`}>
+                  <div className={`rounded-xl border p-3 ${t.border}`} style={{ borderColor: `${accent}30`, backgroundColor: `${accent}08` }}>
                     <p className={`mb-1 text-xs font-medium ${t.muted}`}>Einladungslink</p>
                     <p className="break-all font-mono text-xs" style={{ color: accent }}>{inviteUrl}</p>
                   </div>
@@ -802,14 +824,16 @@ function Dashboard({ user, setup, onSignOut }: {
               </div>
 
               {/* Users */}
-              <div className={`rounded-2xl border p-5 ${t.border} ${t.inputBg}`}>
+              <div className={`rounded-2xl border p-5 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
                 <h2 className={`mb-3 font-semibold ${t.text}`}>Nutzer</h2>
                 {adminUsers.length === 0 ? (
                   <p className={`text-sm ${t.muted}`}>Keine Nutzer geladen.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {adminUsers.map((u) => (
-                      <li key={u.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${t.border}`}>
+                    {adminUsers.map((u, i) => (
+                      <li key={u.id}
+                        className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-all duration-200 hover:-translate-y-px ${t.border}`}
+                        style={{ animationDelay: `${i * 50}ms` }}>
                         <span className={t.text}>{u.email}</span>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs capitalize ${t.muted}`}>{u.role}</span>
