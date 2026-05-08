@@ -2,6 +2,7 @@ import 'dotenv/config';
 import crypto, { webcrypto } from 'node:crypto';
 import dgram from 'node:dgram';
 import httpsModule from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
@@ -105,14 +106,21 @@ type ProxmoxConfig      = { type: 'proxmox'; ip: string; port?: number; tokenId:
 type RdpConfig          = { type: 'rdp'; ip: string; port?: number; username?: string };
 type SshConfig          = { type: 'ssh'; ip: string; port?: number; username?: string };
 type HttpConfig         = { type: 'http'; ip: string; onPath: string; offPath?: string; statusPath?: string; method?: 'GET' | 'POST' };
+// Tasmota: works with NOUS A5T, Sonoff, Gosund, and any Tasmota-based device
+type TasmotaConfig      = { type: 'tasmota'; ip: string; channels?: number };
+// Docker: remote daemon via TCP (enable with dockerd -H tcp://0.0.0.0:2375)
+type DockerConfig       = { type: 'docker'; ip: string; port?: number };
+// Tailscale: uses official Tailscale API
+type TailscaleConfig    = { type: 'tailscale'; apiKey: string; tailnet: string };
 
-type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig;
+type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | TasmotaConfig | DockerConfig | TailscaleConfig;
 
-type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http';
+type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http' | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: PermissionFlag[] = [
   'control:plugs', 'control:lights', 'control:wol',
   'view:proxmox', 'control:proxmox', 'view:rdp', 'view:ssh', 'control:http',
+  'control:tasmota', 'view:docker', 'control:docker', 'view:tailscale',
 ];
 
 type DeviceRecord = {
@@ -135,8 +143,12 @@ type WolButtonWidgetConfig    = { type: 'wol_button';    deviceId: string; label
 type ProxmoxVmsWidgetConfig   = { type: 'proxmox_vms';   deviceId: string };
 type NoteWidgetConfig         = { type: 'note';          content: string; title?: string };
 type QuickActionsWidgetConfig = { type: 'quick_actions'; deviceIds: string[] };
+type EnergyWidgetConfig       = { type: 'energy';        deviceId: string };
+type DockerWidgetConfig       = { type: 'docker_containers'; deviceId: string };
+type TailscaleWidgetConfig    = { type: 'tailscale_peers';   deviceId: string };
+type MonitorWidgetConfig      = { type: 'monitor';       deviceIds?: string[] };
 
-type WidgetConfig = ClockWidgetConfig | WeatherWidgetConfig | DeviceToggleWidgetConfig | WolButtonWidgetConfig | ProxmoxVmsWidgetConfig | NoteWidgetConfig | QuickActionsWidgetConfig;
+type WidgetConfig = ClockWidgetConfig | WeatherWidgetConfig | DeviceToggleWidgetConfig | WolButtonWidgetConfig | ProxmoxVmsWidgetConfig | NoteWidgetConfig | QuickActionsWidgetConfig | EnergyWidgetConfig | DockerWidgetConfig | TailscaleWidgetConfig | MonitorWidgetConfig;
 
 type WidgetRecord = { id: string; userId: string; layout: WidgetLayout; config: WidgetConfig };
 
@@ -687,6 +699,49 @@ app.get('/api/auth/health', (_req, res) => {
   res.json({ ok: true, rpID: getEffectiveRPID(), rpName, origin: getEffectiveOrigin(), message: 'Passkey auth server is running' });
 });
 
+// ── Monitor (TCP health checks) ───────────────────────────────────────────────
+
+type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
+const monitorStatuses = new Map<string, MonitorStatus>();
+
+const checkTcp = (host: string, port: number, timeoutMs = 2500): Promise<number | null> =>
+  new Promise((resolve) => {
+    const t0 = Date.now();
+    const sock = net.createConnection({ host, port, timeout: timeoutMs });
+    sock.once('connect', () => { sock.destroy(); resolve(Date.now() - t0); });
+    sock.once('error', () => resolve(null));
+    sock.once('timeout', () => { sock.destroy(); resolve(null); });
+  });
+
+const deviceCheckPort = (cfg: DeviceConfig): { host: string; port: number } | null => {
+  if (cfg.type === 'wol' || cfg.type === 'tailscale') return null;
+  const ip = (cfg as any).ip as string | undefined;
+  if (!ip) return null;
+  const portMap: Record<string, number> = {
+    shelly_plug: 80, shelly_light: 80, tasmota: 80, http: 80,
+    proxmox: (cfg as ProxmoxConfig).port ?? 8006,
+    rdp: (cfg as RdpConfig).port ?? 3389,
+    ssh: (cfg as SshConfig).port ?? 22,
+    docker: (cfg as DockerConfig).port ?? 2375,
+  };
+  const port = portMap[cfg.type];
+  return port ? { host: ip, port } : null;
+};
+
+const runMonitorChecks = async () => {
+  const promises = [...devices.values()].map(async (device) => {
+    const target = deviceCheckPort(device.config);
+    if (!target) return;
+    const latency = await checkTcp(target.host, target.port);
+    monitorStatuses.set(device.id, { deviceId: device.id, online: latency !== null, latencyMs: latency, lastCheck: Date.now() });
+  });
+  await Promise.allSettled(promises);
+};
+
+// Run once 8s after start, then every 30s
+setTimeout(() => void runMonitorChecks(), 8_000);
+setInterval(() => void runMonitorChecks(), 30_000);
+
 // ── Wake-on-LAN ───────────────────────────────────────────────────────────────
 
 const sendWOL = (mac: string, broadcastIp = '255.255.255.255', port = 9): Promise<void> =>
@@ -822,12 +877,80 @@ app.post('/api/devices/:id/action', async (req, res) => {
       return res.json({ ok: true, status: r.status });
     }
 
+    if (cfg.type === 'tasmota') {
+      const ch = req.body.channel ? `${Number(req.body.channel)}` : '';
+      if (action === 'on' || action === 'off' || action === 'toggle') {
+        const cmd = `Power${ch}+${action.charAt(0).toUpperCase() + action.slice(1)}`;
+        const r = await fetch(`http://${cfg.ip}/cm?cmnd=${encodeURIComponent(cmd)}`);
+        return res.json(await r.json());
+      }
+      if (action === 'status') {
+        const r = await fetch(`http://${cfg.ip}/cm?cmnd=Power${ch}`);
+        return res.json(await r.json());
+      }
+      if (action === 'energy') {
+        const r = await fetch(`http://${cfg.ip}/cm?cmnd=Status+10`);
+        return res.json(await r.json());
+      }
+      return res.status(400).json({ error: 'Supported actions: on, off, toggle, status, energy' });
+    }
+
+    if (cfg.type === 'docker') {
+      const base = `http://${cfg.ip}:${cfg.port ?? 2375}`;
+      if (action === 'list_containers') {
+        const r = await fetch(`${base}/containers/json?all=1`);
+        if (!r.ok) return res.status(502).json({ error: 'Docker API error', status: r.status });
+        return res.json(await r.json());
+      }
+      const { containerId, containerAction } = req.body as { containerId?: string; containerAction?: string };
+      if (containerId && containerAction && ['start', 'stop', 'restart', 'pause', 'unpause'].includes(containerAction)) {
+        const r = await fetch(`${base}/containers/${containerId}/${containerAction}`, { method: 'POST' });
+        return res.json({ ok: r.ok, status: r.status });
+      }
+      return res.status(400).json({ error: 'Use action=list_containers or provide containerId+containerAction' });
+    }
+
+    if (cfg.type === 'tailscale') {
+      if (action !== 'list_devices') return res.status(400).json({ error: 'Only list_devices is supported' });
+      const tailnet = encodeURIComponent(cfg.tailnet);
+      const r = await fetch(`https://api.tailscale.com/api/v2/tailnet/${tailnet}/devices`, {
+        headers: { Authorization: `Bearer ${cfg.apiKey}` },
+      });
+      if (!r.ok) return res.status(502).json({ error: 'Tailscale API error', status: r.status });
+      return res.json(await r.json());
+    }
+
     return res.status(400).json({ error: 'Unknown device type' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Device action failed';
     console.error('device action error', msg);
     return res.status(502).json({ error: msg });
   }
+});
+
+// ── Monitor route ────────────────────────────────────────────────────────────
+
+app.get('/api/monitor/status', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const isAdminUser = user.role === 'root' || user.role === 'admin';
+  // Only return statuses for devices the user can access
+  const accessible = [...devices.values()]
+    .filter((d) => userHasDeviceAccess(userId, user.role, d))
+    .map((d) => d.id);
+  const statuses = accessible.reduce<Record<string, MonitorStatus>>((acc, id) => {
+    const s = monitorStatuses.get(id);
+    if (s) acc[id] = s;
+    return acc;
+  }, {});
+  return res.json({ statuses });
+});
+
+app.post('/api/monitor/check', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  await runMonitorChecks();
+  return res.json({ ok: true, checked: devices.size });
 });
 
 // ── Widget routes ─────────────────────────────────────────────────────────────

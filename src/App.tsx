@@ -14,17 +14,22 @@ type AdminUser = { id: string; email: string; role: Role; hasPasskey: boolean };
 
 type PermissionFlag =
   | 'control:plugs' | 'control:lights' | 'control:wol'
-  | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http';
+  | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http'
+  | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: { flag: PermissionFlag; label: string; desc: string }[] = [
-  { flag: 'control:plugs',   label: 'Steckdosen',   desc: 'Smart Plugs ein/ausschalten' },
-  { flag: 'control:lights',  label: 'Licht',         desc: 'Lichter steuern' },
-  { flag: 'control:wol',     label: 'Wake-on-LAN',   desc: 'Geräte per WOL aufwecken' },
-  { flag: 'view:proxmox',    label: 'Proxmox (lesen)',desc: 'VMs einsehen' },
-  { flag: 'control:proxmox', label: 'Proxmox (ctrl)', desc: 'VMs starten/stoppen' },
-  { flag: 'view:rdp',        label: 'RDP anzeigen',  desc: 'RDP-Verbindungsdaten sehen' },
-  { flag: 'view:ssh',        label: 'SSH anzeigen',  desc: 'SSH-Verbindungsdaten sehen' },
-  { flag: 'control:http',    label: 'HTTP-Geräte',   desc: 'HTTP-Gerätebefehle senden' },
+  { flag: 'control:plugs',    label: 'Steckdosen',      desc: 'Smart Plugs ein/ausschalten' },
+  { flag: 'control:lights',   label: 'Licht',            desc: 'Lichter steuern' },
+  { flag: 'control:wol',      label: 'Wake-on-LAN',      desc: 'Geräte per WOL aufwecken' },
+  { flag: 'view:proxmox',     label: 'Proxmox (lesen)',  desc: 'VMs einsehen' },
+  { flag: 'control:proxmox',  label: 'Proxmox (ctrl)',   desc: 'VMs starten/stoppen' },
+  { flag: 'view:rdp',         label: 'RDP anzeigen',     desc: 'RDP-Verbindungsdaten sehen' },
+  { flag: 'view:ssh',         label: 'SSH anzeigen',     desc: 'SSH-Verbindungsdaten sehen' },
+  { flag: 'control:http',     label: 'HTTP-Geräte',      desc: 'HTTP-Gerätebefehle senden' },
+  { flag: 'control:tasmota',  label: 'Tasmota-Geräte',   desc: 'Tasmota Steckdosen steuern' },
+  { flag: 'view:docker',      label: 'Docker (lesen)',   desc: 'Container-Status einsehen' },
+  { flag: 'control:docker',   label: 'Docker (ctrl)',    desc: 'Container starten/stoppen' },
+  { flag: 'view:tailscale',   label: 'Tailscale',        desc: 'Netzwerk-Peers einsehen' },
 ];
 
 type DeviceConfig =
@@ -34,22 +39,31 @@ type DeviceConfig =
   | { type: 'proxmox'; ip: string; port?: number; tokenId: string; tokenSecret: string; allowSelfSigned?: boolean; node?: string }
   | { type: 'rdp'; ip: string; port?: number; username?: string }
   | { type: 'ssh'; ip: string; port?: number; username?: string }
-  | { type: 'http'; ip: string; onPath: string; offPath?: string; method?: string };
+  | { type: 'http'; ip: string; onPath: string; offPath?: string; method?: string }
+  | { type: 'tasmota'; ip: string; channels?: number }
+  | { type: 'docker'; ip: string; port?: number }
+  | { type: 'tailscale'; apiKey: string; tailnet: string };
 
 type Device = {
   id: string; name: string; room?: string; icon?: string;
   config: DeviceConfig; requiredPermissions: PermissionFlag[];
 };
 
+type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
+
 type WidgetLayout = { col: number; row: number; w: number; h: number };
 type WidgetConfig =
-  | { type: 'clock';         format?: '12h' | '24h'; showSeconds?: boolean; showDate?: boolean }
-  | { type: 'weather';       location?: string; unit?: 'C' | 'F' }
-  | { type: 'device_toggle'; deviceId: string }
-  | { type: 'wol_button';    deviceId: string; label?: string }
-  | { type: 'proxmox_vms';   deviceId: string }
-  | { type: 'note';          content: string; title?: string }
-  | { type: 'quick_actions'; deviceIds: string[] };
+  | { type: 'clock';              format?: '12h' | '24h'; showSeconds?: boolean; showDate?: boolean }
+  | { type: 'weather';            location?: string; unit?: 'C' | 'F' }
+  | { type: 'device_toggle';      deviceId: string }
+  | { type: 'wol_button';         deviceId: string; label?: string }
+  | { type: 'proxmox_vms';        deviceId: string }
+  | { type: 'note';               content: string; title?: string }
+  | { type: 'quick_actions';      deviceIds: string[] }
+  | { type: 'energy';             deviceId: string }
+  | { type: 'docker_containers';  deviceId: string }
+  | { type: 'tailscale_peers';    deviceId: string }
+  | { type: 'monitor';            deviceIds?: string[] };
 
 type Widget = { id: string; userId: string; layout: WidgetLayout; config: WidgetConfig };
 
@@ -308,17 +322,21 @@ const readErr = async (r: Response, fallback: string) => {
 const DEVICE_TYPE_OPTIONS = [
   { value: 'shelly_plug',  label: '🔌 Smart Plug (Shelly)' },
   { value: 'shelly_light', label: '💡 Licht (Shelly)' },
+  { value: 'tasmota',      label: '🔌 Tasmota Gerät (NOUS, Sonoff…)' },
   { value: 'wol',          label: '⚡ Wake-on-LAN' },
   { value: 'proxmox',      label: '🖥  Proxmox Server' },
+  { value: 'docker',       label: '🐳 Docker Host' },
   { value: 'rdp',          label: '🪟 Windows RDP' },
   { value: 'ssh',          label: '🐧 SSH / Linux' },
+  { value: 'tailscale',    label: '🔒 Tailscale Netzwerk' },
   { value: 'http',         label: '🌐 HTTP Gerät' },
 ];
 
 const deviceTypeIcon = (type: string) => {
   const map: Record<string, string> = {
-    shelly_plug: '🔌', shelly_light: '💡', wol: '⚡',
-    proxmox: '🖥', rdp: '🪟', ssh: '🐧', http: '🌐',
+    shelly_plug: '🔌', shelly_light: '💡', tasmota: '🔌',
+    wol: '⚡', proxmox: '🖥', docker: '🐳',
+    rdp: '🪟', ssh: '🐧', tailscale: '🔒', http: '🌐',
   };
   return map[type] ?? '📱';
 };
@@ -326,8 +344,10 @@ const deviceTypeIcon = (type: string) => {
 const deviceTypePermission = (type: string): PermissionFlag | null => {
   const map: Record<string, PermissionFlag> = {
     shelly_plug: 'control:plugs', shelly_light: 'control:lights',
-    wol: 'control:wol', proxmox: 'view:proxmox',
-    rdp: 'view:rdp', ssh: 'view:ssh', http: 'control:http',
+    tasmota: 'control:tasmota', wol: 'control:wol',
+    proxmox: 'view:proxmox', docker: 'view:docker',
+    rdp: 'view:rdp', ssh: 'view:ssh',
+    tailscale: 'view:tailscale', http: 'control:http',
   };
   return map[type] ?? null;
 };
@@ -358,6 +378,10 @@ function DeviceForm({
   const [port, setPort] = useState(String((initial?.config as any)?.port ?? ''));
   const [onPath, setOnPath] = useState((initial?.config as any)?.onPath ?? '/relay/0?turn=on');
   const [offPath, setOffPath] = useState((initial?.config as any)?.offPath ?? '/relay/0?turn=off');
+  const [tasmotaChannels, setTasmotaChannels] = useState(String((initial?.config as any)?.channels ?? '1'));
+  const [dockerPort, setDockerPort] = useState(String((initial?.config as any)?.port ?? ''));
+  const [tailscaleApiKey, setTailscaleApiKey] = useState((initial?.config as any)?.apiKey ?? '');
+  const [tailscaleTailnet, setTailscaleTailnet] = useState((initial?.config as any)?.tailnet ?? '');
   const [perms, setPerms] = useState<PermissionFlag[]>(initial?.requiredPermissions ?? []);
   const [loading, setLoading] = useState(false);
 
@@ -376,6 +400,9 @@ function DeviceForm({
     if (type === 'rdp') return { type, ip, username: username || undefined, port: port ? Number(port) : undefined };
     if (type === 'ssh') return { type, ip, username: username || undefined, port: port ? Number(port) : undefined };
     if (type === 'http') return { type, ip, onPath, offPath: offPath || undefined };
+    if (type === 'tasmota') return { type, ip, channels: Number(tasmotaChannels) || 1 };
+    if (type === 'docker') return { type, ip, port: dockerPort ? Number(dockerPort) : undefined };
+    if (type === 'tailscale') { if (!tailscaleApiKey || !tailscaleTailnet) return null; return { type, apiKey: tailscaleApiKey, tailnet: tailscaleTailnet }; }
     return null;
   };
 
@@ -443,6 +470,24 @@ function DeviceForm({
           <Input label="Pfad AUS (opt.)" value={offPath} onChange={setOffPath} placeholder="/relay/0?turn=off" t={t} accent={accent} />
         </div>
       )}
+      {type === 'tasmota' && (
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.100" t={t} accent={accent} />
+          <Input label="Anzahl Kanäle" value={tasmotaChannels} onChange={setTasmotaChannels} placeholder="1" t={t} accent={accent} hint="1 = Einzel-Plug, 4 = Mehrfachstecker" />
+        </div>
+      )}
+      {type === 'docker' && (
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.10" t={t} accent={accent} />
+          <Input label="Port (opt.)" value={dockerPort} onChange={setDockerPort} placeholder="2375" t={t} accent={accent} hint="Docker TCP API aktivieren: dockerd -H tcp://0.0.0.0:2375" />
+        </div>
+      )}
+      {type === 'tailscale' && (
+        <div className="space-y-3">
+          <Input label="API Key" value={tailscaleApiKey} onChange={setTailscaleApiKey} placeholder="tskey-api-..." t={t} accent={accent} hint="Erstelle unter tailscale.com/admin/settings/keys" />
+          <Input label="Tailnet" value={tailscaleTailnet} onChange={setTailscaleTailnet} placeholder="deine-organisation.ts.net" t={t} accent={accent} />
+        </div>
+      )}
 
       <div className="space-y-2">
         <label className={`block text-sm font-medium ${t.muted}`}>Berechtigungen (wer darf dieses Gerät sehen)</label>
@@ -458,7 +503,7 @@ function DeviceForm({
 
       <div className="flex gap-2 pt-1">
         <Btn accent={accent} className="flex-1" onClick={save} loading={loading}
-          disabled={!name || (!ip && type !== 'wol') || (type === 'wol' && !mac)}>
+          disabled={!name || (type === 'wol' && !mac) || (type === 'tailscale' && (!tailscaleApiKey || !tailscaleTailnet)) || (!ip && !['wol','tailscale'].includes(type))}>
           Speichern
         </Btn>
         <Btn accent={accent} variant="secondary" onClick={onCancel}>Abbrechen</Btn>
@@ -470,17 +515,23 @@ function DeviceForm({
 // ── Widget Form (add widget) ──────────────────────────────────────────────────
 
 const WIDGET_TYPE_OPTIONS = [
-  { value: 'clock',         label: '🕐 Uhr' },
-  { value: 'weather',       label: '🌤 Wetter' },
-  { value: 'device_toggle', label: '🔌 Gerät schalten' },
-  { value: 'wol_button',    label: '⚡ Wake-on-LAN' },
-  { value: 'proxmox_vms',   label: '🖥  Proxmox VMs' },
-  { value: 'note',          label: '📝 Notiz' },
+  { value: 'clock',               label: '🕐 Uhr' },
+  { value: 'weather',             label: '🌤 Wetter' },
+  { value: 'device_toggle',       label: '🔌 Gerät schalten' },
+  { value: 'wol_button',          label: '⚡ Wake-on-LAN' },
+  { value: 'proxmox_vms',         label: '🖥  Proxmox VMs' },
+  { value: 'energy',              label: '⚡ Energie (Tasmota)' },
+  { value: 'docker_containers',   label: '🐳 Docker Container' },
+  { value: 'tailscale_peers',     label: '🔒 Tailscale Peers' },
+  { value: 'monitor',             label: '📡 Service Monitor' },
+  { value: 'note',                label: '📝 Notiz' },
 ];
 
 const WIDGET_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   clock: { w: 4, h: 2 }, weather: { w: 4, h: 2 }, device_toggle: { w: 3, h: 2 },
   wol_button: { w: 3, h: 2 }, proxmox_vms: { w: 6, h: 3 }, note: { w: 4, h: 2 },
+  energy: { w: 4, h: 2 }, docker_containers: { w: 6, h: 3 },
+  tailscale_peers: { w: 5, h: 3 }, monitor: { w: 6, h: 3 },
 };
 
 function WidgetForm({
@@ -512,6 +563,10 @@ function WidgetForm({
     if (wtype === 'wol_button') { if (!deviceId) return null; return { type: 'wol_button', deviceId, label: wolLabel || undefined }; }
     if (wtype === 'proxmox_vms') { if (!deviceId) return null; return { type: 'proxmox_vms', deviceId }; }
     if (wtype === 'note') return { type: 'note', content: noteContent, title: noteTitle || undefined };
+    if (wtype === 'energy') { if (!deviceId) return null; return { type: 'energy', deviceId }; }
+    if (wtype === 'docker_containers') { if (!deviceId) return null; return { type: 'docker_containers', deviceId }; }
+    if (wtype === 'tailscale_peers') { if (!deviceId) return null; return { type: 'tailscale_peers', deviceId }; }
+    if (wtype === 'monitor') return { type: 'monitor' };
     return null;
   };
 
@@ -562,6 +617,24 @@ function WidgetForm({
             : <p className={`text-sm ${t.muted}`}>Kein WOL-Gerät vorhanden.</p>}
           <Input label="Beschriftung (opt.)" value={wolLabel} onChange={setWolLabel} placeholder="Server aufwecken" t={t} accent={accent} />
         </div>
+      )}
+      {(wtype === 'energy') && (
+        <Select label="Tasmota-Gerät" value={deviceId} onChange={setDeviceId}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'tasmota')}
+          t={t} accent={accent} />
+      )}
+      {wtype === 'docker_containers' && (
+        <Select label="Docker-Host" value={deviceId} onChange={setDeviceId}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'docker')}
+          t={t} accent={accent} />
+      )}
+      {wtype === 'tailscale_peers' && (
+        <Select label="Tailscale-Konfiguration" value={deviceId} onChange={setDeviceId}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'tailscale')}
+          t={t} accent={accent} />
+      )}
+      {wtype === 'monitor' && (
+        <p className={`text-sm ${t.muted}`}>Zeigt den Status aller erreichbaren Geräte.</p>
       )}
       {wtype === 'note' && (
         <div className="space-y-3">
@@ -733,60 +806,6 @@ function WolButtonWidget({ config, devices, t, accent }: {
   );
 }
 
-function ProxmoxVmsWidget({ config, devices, t, accent }: {
-  config: Extract<WidgetConfig, { type: 'proxmox_vms' }>;
-  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
-}) {
-  const device = devices.find((d) => d.id === config.deviceId);
-  const [vms, setVms] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-
-  const load = async () => {
-    if (!device) return;
-    setLoading(true); setErr('');
-    try {
-      const r = await fetch(`/api/devices/${device.id}/action`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ action: 'list_vms' }),
-      });
-      if (!r.ok) { setErr('Proxmox API Fehler'); }
-      else {
-        const data = await r.json() as any;
-        setVms((data.data ?? []).slice(0, 8));
-      }
-    } catch { setErr('Netzwerkfehler'); }
-    setLoading(false);
-  };
-
-  useEffect(() => { void load(); }, [config.deviceId]);
-
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
-
-  return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <p className={`text-sm font-medium ${t.text}`}>{device.name}</p>
-        <button onClick={() => void load()} className={`text-xs ${t.muted} hover:opacity-100 opacity-60`}>↻</button>
-      </div>
-      {loading && <div className="flex flex-1 items-center justify-center"><Spinner size={20} color={accent} /></div>}
-      {err && <p className="text-xs text-red-500">{err}</p>}
-      {!loading && vms.length === 0 && !err && <p className={`text-xs ${t.muted}`}>Keine VMs gefunden</p>}
-      <div className="flex flex-col gap-1 overflow-auto">
-        {vms.map((vm) => (
-          <div key={vm.vmid} className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${t.inputBg}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-1.5 w-1.5 rounded-full ${vm.status === 'running' ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className={`text-xs ${t.text}`}>{vm.name ?? `VM ${vm.vmid}`}</span>
-            </div>
-            <span className={`text-[10px] ${t.muted}`}>{vm.status}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function NoteWidget({ config, t }: {
   config: Extract<WidgetConfig, { type: 'note' }>;
   t: ReturnType<typeof tok>;
@@ -799,28 +818,370 @@ function NoteWidget({ config, t }: {
   );
 }
 
-function WidgetRenderer({ widget, devices, t, accent, onRemove }: {
+function EnergyWidget({ config, devices, t, accent }: {
+  config: Extract<WidgetConfig, { type: 'energy' }>;
+  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+}) {
+  const device = devices.find((d) => d.id === config.deviceId);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    if (!device) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/devices/${device.id}/action`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ action: 'energy' }),
+      });
+      if (r.ok) setData(await r.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, [config.deviceId]);
+
+  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  const sns = data?.StatusSNS?.ENERGY;
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className={`text-sm font-medium ${t.text}`}>{device.name}</p>
+        <button onClick={() => void load()} className={`text-xs ${t.muted} opacity-60 hover:opacity-100`}>↻</button>
+      </div>
+      {loading && <div className="flex flex-1 items-center justify-center"><Spinner size={18} color={accent} /></div>}
+      {sns ? (
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Leistung', val: `${sns.Power ?? '—'} W` },
+            { label: 'Spannung', val: `${sns.Voltage ?? '—'} V` },
+            { label: 'Strom',    val: `${sns.Current ?? '—'} A` },
+            { label: 'Gesamt',   val: `${sns.Today ?? '—'} kWh` },
+          ].map(({ label, val }) => (
+            <div key={label} className={`rounded-xl p-2.5 ${t.inputBg}`}>
+              <p className={`text-[10px] ${t.muted}`}>{label}</p>
+              <p className="text-sm font-semibold tabular-nums" style={{ color: accent }}>{val}</p>
+            </div>
+          ))}
+        </div>
+      ) : !loading && (
+        <p className={`text-xs ${t.muted}`}>Keine Energiedaten</p>
+      )}
+    </div>
+  );
+}
+
+function DockerWidget({ config, devices, t, accent }: {
+  config: Extract<WidgetConfig, { type: 'docker_containers' }>;
+  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+}) {
+  const device = devices.find((d) => d.id === config.deviceId);
+  const [containers, setContainers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [acting, setActing] = useState<string | null>(null);
+
+  const load = async () => {
+    if (!device) return;
+    setLoading(true); setErr('');
+    try {
+      const r = await fetch(`/api/devices/${device.id}/action`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ action: 'list_containers' }),
+      });
+      if (!r.ok) { setErr('Docker API Fehler'); } else { setContainers(await r.json()); }
+    } catch { setErr('Netzwerkfehler'); }
+    setLoading(false);
+  };
+
+  const containerAction = async (id: string, action: string) => {
+    if (!device) return;
+    setActing(id);
+    await fetch(`/api/devices/${device.id}/action`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify({ action: 'container_ctrl', containerId: id, containerAction: action }),
+    });
+    setTimeout(() => { void load(); setActing(null); }, 800);
+  };
+
+  useEffect(() => { void load(); }, [config.deviceId]);
+
+  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className={`text-sm font-medium ${t.text}`}>{device.name}</p>
+        <button onClick={() => void load()} className={`text-xs ${t.muted} opacity-60 hover:opacity-100`}>↻</button>
+      </div>
+      {loading && <div className="flex flex-1 items-center justify-center"><Spinner size={18} color={accent} /></div>}
+      {err && <p className="text-xs text-red-500">{err}</p>}
+      <div className="flex flex-col gap-1 overflow-auto">
+        {containers.map((c) => {
+          const running = c.State === 'running';
+          const name = (c.Names?.[0] ?? c.Id?.slice(0, 12) ?? '?').replace(/^\//, '');
+          return (
+            <div key={c.Id} className={`flex items-center justify-between rounded-lg px-2.5 py-2 ${t.inputBg}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${running ? 'bg-green-500' : 'bg-red-500/70'}`} />
+                <div className="min-w-0">
+                  <p className={`text-xs font-medium truncate ${t.text}`}>{name}</p>
+                  <p className={`text-[10px] truncate ${t.muted}`}>{c.Image?.split(':')[0]}</p>
+                </div>
+              </div>
+              <div className="flex gap-1 flex-shrink-0">
+                {running ? (
+                  <button onClick={() => containerAction(c.Id, 'stop')} disabled={acting === c.Id}
+                    className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
+                    {acting === c.Id ? '…' : 'Stop'}
+                  </button>
+                ) : (
+                  <button onClick={() => containerAction(c.Id, 'start')} disabled={acting === c.Id}
+                    className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all ${t.inputBg}`}
+                    style={{ color: accent }}>
+                    {acting === c.Id ? '…' : 'Start'}
+                  </button>
+                )}
+                <button onClick={() => containerAction(c.Id, 'restart')} disabled={acting === c.Id}
+                  className={`rounded-lg px-2 py-1 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-60`}>↺</button>
+              </div>
+            </div>
+          );
+        })}
+        {!loading && containers.length === 0 && !err && (
+          <p className={`text-xs ${t.muted}`}>Keine Container gefunden</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TailscaleWidget({ config, devices, t, accent }: {
+  config: Extract<WidgetConfig, { type: 'tailscale_peers' }>;
+  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+}) {
+  const device = devices.find((d) => d.id === config.deviceId);
+  const [peers, setPeers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = async () => {
+    if (!device) return;
+    setLoading(true); setErr('');
+    try {
+      const r = await fetch(`/api/devices/${device.id}/action`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ action: 'list_devices' }),
+      });
+      if (!r.ok) { setErr('Tailscale API Fehler'); }
+      else {
+        const data = await r.json() as any;
+        setPeers((data.devices ?? []).slice(0, 12));
+      }
+    } catch { setErr('Netzwerkfehler'); }
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, [config.deviceId]);
+
+  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className={`text-sm font-medium ${t.text}`}>Tailscale Peers</p>
+        <button onClick={() => void load()} className={`text-xs ${t.muted} opacity-60 hover:opacity-100`}>↻</button>
+      </div>
+      {loading && <div className="flex flex-1 items-center justify-center"><Spinner size={18} color={accent} /></div>}
+      {err && <p className="text-xs text-red-500">{err}</p>}
+      <div className="flex flex-col gap-1 overflow-auto">
+        {peers.map((p) => {
+          const lastSeen = p.lastSeen ? new Date(p.lastSeen) : null;
+          const minsAgo = lastSeen ? Math.floor((Date.now() - lastSeen.getTime()) / 60_000) : null;
+          const online = minsAgo !== null && minsAgo < 5;
+          return (
+            <div key={p.id} className={`flex items-center justify-between rounded-lg px-2.5 py-2 ${t.inputBg}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${online ? 'bg-green-500' : 'bg-yellow-500/70'}`} />
+                <div className="min-w-0">
+                  <p className={`text-xs font-medium truncate ${t.text}`}>{p.hostname ?? p.name}</p>
+                  <p className={`text-[10px] ${t.muted}`}>{(p.addresses ?? [])[0] ?? '—'}</p>
+                </div>
+              </div>
+              <span className={`text-[10px] ${t.muted} flex-shrink-0`}>
+                {online ? 'online' : minsAgo !== null ? `${minsAgo}m` : '—'}
+              </span>
+            </div>
+          );
+        })}
+        {!loading && peers.length === 0 && !err && <p className={`text-xs ${t.muted}`}>Keine Peers</p>}
+      </div>
+    </div>
+  );
+}
+
+function MonitorWidget({ devices, t, accent, statuses }: {
+  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+  statuses: Record<string, MonitorStatus>;
+}) {
+  const monitorable = devices.filter((d) => d.config.type !== 'wol' && d.config.type !== 'tailscale');
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <p className={`text-sm font-medium ${t.text}`}>Service Monitor</p>
+      <div className="flex flex-col gap-1 overflow-auto">
+        {monitorable.length === 0 && <p className={`text-xs ${t.muted}`}>Keine überwachbaren Geräte</p>}
+        {monitorable.map((d) => {
+          const s = statuses[d.id];
+          const online = s?.online;
+          const checked = s?.lastCheck;
+          return (
+            <div key={d.id} className={`flex items-center justify-between rounded-lg px-2.5 py-2 ${t.inputBg}`}>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                  !s ? 'bg-white/20' : online ? 'bg-green-500' : 'bg-red-500'
+                }`} />
+                <div>
+                  <p className={`text-xs font-medium ${t.text}`}>{d.name}</p>
+                  {d.room && <p className={`text-[10px] ${t.muted}`}>{d.room}</p>}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                {s?.latencyMs != null && (
+                  <p className="text-xs tabular-nums" style={{ color: accent }}>{s.latencyMs}ms</p>
+                )}
+                <p className={`text-[10px] ${t.muted}`}>
+                  {!s ? 'ausstehend' : online ? 'online' : 'offline'}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Enhanced Proxmox widget with VM controls
+function ProxmoxVmsWidget({ config, devices, t, accent }: {
+  config: Extract<WidgetConfig, { type: 'proxmox_vms' }>;
+  devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+}) {
+  const device = devices.find((d) => d.id === config.deviceId);
+  const [vms, setVms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [acting, setActing] = useState<string | null>(null);
+
+  const load = async () => {
+    if (!device) return;
+    setLoading(true); setErr('');
+    try {
+      const r = await fetch(`/api/devices/${device.id}/action`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ action: 'list_vms' }),
+      });
+      if (!r.ok) { setErr('Proxmox API Fehler'); }
+      else { setVms((await r.json() as any).data ?? []); }
+    } catch { setErr('Netzwerkfehler'); }
+    setLoading(false);
+  };
+
+  const vmAction = async (vmid: string, vmAct: string) => {
+    if (!device) return;
+    setActing(vmid);
+    await fetch(`/api/devices/${device.id}/action`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify({ action: 'vm_ctrl', vmId: vmid, vmAction: vmAct }),
+    });
+    setTimeout(() => { void load(); setActing(null); }, 1200);
+  };
+
+  useEffect(() => { void load(); }, [config.deviceId]);
+
+  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className={`text-sm font-medium ${t.text}`}>{device.name}</p>
+        <button onClick={() => void load()} className={`text-xs ${t.muted} opacity-60 hover:opacity-100`}>↻</button>
+      </div>
+      {loading && <div className="flex flex-1 items-center justify-center"><Spinner size={18} color={accent} /></div>}
+      {err && <p className="text-xs text-red-500">{err}</p>}
+      <div className="flex flex-col gap-1.5 overflow-auto">
+        {vms.map((vm) => {
+          const running = vm.status === 'running';
+          const cpu = vm.cpu ? `${(vm.cpu * 100).toFixed(1)}%` : null;
+          const mem = vm.mem && vm.maxmem ? `${Math.round((vm.mem / vm.maxmem) * 100)}%` : null;
+          return (
+            <div key={vm.vmid} className={`rounded-xl border p-2.5 ${t.border}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div className={`h-1.5 w-1.5 rounded-full ${running ? 'bg-green-500' : 'bg-red-500/60'}`} />
+                  <p className={`text-xs font-medium ${t.text}`}>{vm.name ?? `VM ${vm.vmid}`}</p>
+                  <span className={`text-[10px] ${t.muted}`}>#{vm.vmid}</span>
+                </div>
+                <div className="flex gap-1">
+                  {running ? (
+                    <>
+                      <button onClick={() => vmAction(vm.vmid, 'shutdown')} disabled={acting === vm.vmid}
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
+                        {acting === vm.vmid ? '…' : 'Stop'}
+                      </button>
+                      <button onClick={() => vmAction(vm.vmid, 'reboot')} disabled={acting === vm.vmid}
+                        className={`rounded px-1.5 py-0.5 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-70`}>↺</button>
+                    </>
+                  ) : (
+                    <button onClick={() => vmAction(vm.vmid, 'start')} disabled={acting === vm.vmid}
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.inputBg}`} style={{ color: accent }}>
+                      {acting === vm.vmid ? '…' : 'Start'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {(cpu || mem) && (
+                <div className="flex gap-3">
+                  {cpu && <div className="flex items-center gap-1"><span className={`text-[10px] ${t.muted}`}>CPU</span><span className="text-[10px] tabular-nums" style={{ color: accent }}>{cpu}</span></div>}
+                  {mem && <div className="flex items-center gap-1"><span className={`text-[10px] ${t.muted}`}>RAM</span><span className="text-[10px] tabular-nums" style={{ color: accent }}>{mem}</span></div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!loading && vms.length === 0 && !err && <p className={`text-xs ${t.muted}`}>Keine VMs gefunden</p>}
+      </div>
+    </div>
+  );
+}
+
+function WidgetRenderer({ widget, devices, t, accent, onRemove, statuses = {} }: {
   widget: Widget; devices: Device[];
   t: ReturnType<typeof tok>; accent: string;
   onRemove?: () => void;
+  statuses?: Record<string, MonitorStatus>;
 }) {
   const c = widget.config;
   return (
-    <div className={`group relative rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-px ${t.inputBg} ${t.border}`}
+    <div className={`group relative h-full rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-px ${t.inputBg} ${t.border}`}
       style={panelStyle(accent, t)}>
       {onRemove && (
-        <button
-          onClick={onRemove}
-          className="absolute right-2 top-2 hidden h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-white text-xs group-hover:flex">
+        <button onClick={onRemove}
+          className="absolute right-2 top-2 hidden h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-white text-xs group-hover:flex z-10">
           ×
         </button>
       )}
-      {c.type === 'clock'         && <ClockWidget config={c} t={t} accent={accent} />}
-      {c.type === 'weather'       && <WeatherWidget config={c} t={t} accent={accent} />}
-      {c.type === 'device_toggle' && <DeviceToggleWidget config={c} devices={devices} t={t} accent={accent} />}
-      {c.type === 'wol_button'    && <WolButtonWidget config={c} devices={devices} t={t} accent={accent} />}
-      {c.type === 'proxmox_vms'   && <ProxmoxVmsWidget config={c} devices={devices} t={t} accent={accent} />}
-      {c.type === 'note'          && <NoteWidget config={c} t={t} />}
+      {c.type === 'clock'              && <ClockWidget config={c} t={t} accent={accent} />}
+      {c.type === 'weather'            && <WeatherWidget config={c} t={t} accent={accent} />}
+      {c.type === 'device_toggle'      && <DeviceToggleWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'wol_button'         && <WolButtonWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'proxmox_vms'        && <ProxmoxVmsWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'note'               && <NoteWidget config={c} t={t} />}
+      {c.type === 'energy'             && <EnergyWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'docker_containers'  && <DockerWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'tailscale_peers'    && <TailscaleWidget config={c} devices={devices} t={t} accent={accent} />}
+      {c.type === 'monitor'            && <MonitorWidget devices={devices} t={t} accent={accent} statuses={statuses} />}
     </div>
   );
 }
@@ -1349,7 +1710,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, devices, setD
 
 // ── Devices tab ───────────────────────────────────────────────────────────────
 
-function DevicesTab({ devices, t, accent }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string }) {
+function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus> }) {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
 
   const doAction = async (device: Device, action: string) => {
@@ -1404,7 +1765,21 @@ function DevicesTab({ devices, t, accent }: { devices: Device[]; t: ReturnType<t
                 style={{ ...panelStyle(accent, t), animationDelay: `${i * 40}ms` }}>
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className={`font-medium ${t.text}`}>{device.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className={`font-medium ${t.text}`}>{device.name}</p>
+                      {statuses[device.id] && (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                          statuses[device.id].online
+                            ? 'bg-green-500/15 text-green-500'
+                            : 'bg-red-500/15 text-red-500'
+                        }`}>
+                          <span className={`h-1 w-1 rounded-full ${statuses[device.id].online ? 'bg-green-500' : 'bg-red-500'}`} />
+                          {statuses[device.id].online
+                            ? `${statuses[device.id].latencyMs}ms`
+                            : 'offline'}
+                        </span>
+                      )}
+                    </div>
                     <p className={`text-xs ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.config.type)?.label.replace(/^\S+\s/, '')}</p>
                   </div>
                   <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.config.type)}</span>
@@ -1438,6 +1813,19 @@ function DevicesTab({ devices, t, accent }: { devices: Device[]; t: ReturnType<t
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
                       <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
                     </>
+                  )}
+                  {device.config.type === 'tasmota' && (
+                    <>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                      <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
+                    </>
+                  )}
+                  {device.config.type === 'docker' && (
+                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
+                  )}
+                  {device.config.type === 'tailscale' && (
+                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
                   )}
                 </div>
               </div>
@@ -1604,6 +1992,7 @@ function Dashboard({ user, setup, onSignOut }: {
   const [profileOpen, setProfileOpen] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [monitorStatuses, setMonitorStatuses] = useState<Record<string, MonitorStatus>>({});
   const [showAddWidget, setShowAddWidget] = useState(false);
 
   const canAdmin = user.role === 'root' || user.role === 'admin';
@@ -1616,6 +2005,12 @@ function Dashboard({ user, setup, onSignOut }: {
     void fetch('/api/widgets', { credentials: 'include' })
       .then((r) => r.ok ? r.json() : { widgets: [] })
       .then((d: { widgets: Widget[] }) => setWidgets(d.widgets));
+    const loadStatuses = () => fetch('/api/monitor/status', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : { statuses: {} })
+      .then((d: { statuses: Record<string, MonitorStatus> }) => setMonitorStatuses(d.statuses));
+    void loadStatuses();
+    const interval = setInterval(() => void loadStatuses(), 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   const goTab = (k: Tab) => { setTab(k); setProfileOpen(false); };
@@ -1741,7 +2136,7 @@ function Dashboard({ user, setup, onSignOut }: {
                       style={{ animationDelay: `${i * 40}ms` }}>
                       <div className={rowH}>
                         <WidgetRenderer widget={widget} devices={devices} t={t} accent={accent}
-                          onRemove={() => removeWidget(widget.id)} />
+                          onRemove={() => removeWidget(widget.id)} statuses={monitorStatuses} />
                       </div>
                     </div>
                   );
@@ -1751,7 +2146,7 @@ function Dashboard({ user, setup, onSignOut }: {
           )}
 
           {tab === 'devices' && (
-            <DevicesTab devices={devices} t={t} accent={accent} />
+            <DevicesTab devices={devices} t={t} accent={accent} statuses={monitorStatuses} />
           )}
 
           {tab === 'settings' && (
