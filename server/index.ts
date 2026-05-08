@@ -33,6 +33,9 @@ const origin = process.env.ORIGIN;
 
 const app = express();
 
+// Trust one proxy hop (Cloudflare → this server)
+app.set('trust proxy', 1);
+
 app.use(cors({ origin, credentials: true }));
 
 app.use((_, res, next) => {
@@ -111,8 +114,8 @@ const invites = new Map<string, InviteRecord>();
 type SetupState = {
   completed: boolean;
   dashboardName: string;
-  theme: 'dark' | 'light';
-  accent: 'cyan' | 'violet' | 'emerald' | 'rose';
+  theme: 'dark' | 'light' | 'ultra-dark';
+  accent: string; // hex color e.g. #007AFF
   rootEmail?: string;
   rootBackupPasswordHash?: string;
   backupPasswordAccepted?: boolean;
@@ -122,8 +125,10 @@ const setupState: SetupState = {
   completed: false,
   dashboardName: 'SM Dashboard',
   theme: 'dark',
-  accent: 'cyan',
+  accent: '#007AFF',
 };
+
+const isValidHex = (color: string) => /^#[0-9A-Fa-f]{6}$/.test(color);
 
 const databaseUrl = process.env.DATABASE_URL;
 const hasPostgresEnv = Boolean(databaseUrl || (process.env.POSTGRES_DB && process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD));
@@ -345,8 +350,8 @@ app.post('/api/setup/complete', (req, res) => {
   const body = req.body as {
     email?: string;
     dashboardName?: string;
-    theme?: 'dark' | 'light';
-    accent?: 'cyan' | 'violet' | 'emerald' | 'rose';
+    theme?: string;
+    accent?: string;
   };
   const email = body.email;
   if (!setupState.rootEmail || email?.toLowerCase() !== setupState.rootEmail) {
@@ -357,12 +362,12 @@ app.post('/api/setup/complete', (req, res) => {
     return res.status(400).json({ error: 'Register a root passkey first' });
   }
   if (!setupState.backupPasswordAccepted) {
-    return res.status(400).json({ error: 'Acknowledge backup password first' });
+    return res.status(400).json({ error: 'Backup password must be acknowledged first' });
   }
   const rawName = body.dashboardName?.trim() ?? '';
   setupState.dashboardName = rawName.length > 0 && rawName.length <= 80 ? rawName : setupState.dashboardName;
-  setupState.theme = body.theme === 'light' ? 'light' : 'dark';
-  setupState.accent = body.accent && ['cyan', 'violet', 'emerald', 'rose'].includes(body.accent) ? body.accent : 'cyan';
+  setupState.theme = (['light', 'dark', 'ultra-dark'] as const).includes(body.theme as any) ? body.theme as SetupState['theme'] : 'dark';
+  setupState.accent = body.accent && isValidHex(body.accent) ? body.accent : '#007AFF';
   setupState.completed = true;
   void persistState();
   return res.json({ ok: true });
