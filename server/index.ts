@@ -303,6 +303,8 @@ app.get('/api/setup/status', (_req, res) => {
     accent: setupState.accent,
     setupStarted: Boolean(setupState.rootEmail),
     backupPasswordAccepted: Boolean(setupState.backupPasswordAccepted),
+    // Only expose rootEmail during active (incomplete) setup so the frontend can pre-fill it
+    rootEmail: !setupState.completed ? (setupState.rootEmail ?? null) : null,
   });
 });
 
