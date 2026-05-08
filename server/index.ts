@@ -33,6 +33,9 @@ const origin = process.env.ORIGIN;
 
 const app = express();
 
+// Trust one proxy hop (Cloudflare → this server)
+app.set('trust proxy', 1);
+
 app.use(cors({ origin, credentials: true }));
 
 app.use((_, res, next) => {
