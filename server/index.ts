@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import crypto, { webcrypto } from 'node:crypto';
+import dgram from 'node:dgram';
+import httpsModule from 'node:https';
 import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
@@ -94,6 +96,50 @@ type StoredAuthenticator = {
 
 type UserRole = 'root' | 'admin' | 'user' | 'readonly';
 
+// ── Device types ──────────────────────────────────────────────────────────────
+
+type ShellyPlugConfig   = { type: 'shelly_plug';   ip: string; channel?: number };
+type ShellyLightConfig  = { type: 'shelly_light';  ip: string; channel?: number };
+type WolConfig          = { type: 'wol';  mac: string; broadcastIp?: string; port?: number };
+type ProxmoxConfig      = { type: 'proxmox'; ip: string; port?: number; tokenId: string; tokenSecret: string; allowSelfSigned?: boolean; node?: string };
+type RdpConfig          = { type: 'rdp'; ip: string; port?: number; username?: string };
+type SshConfig          = { type: 'ssh'; ip: string; port?: number; username?: string };
+type HttpConfig         = { type: 'http'; ip: string; onPath: string; offPath?: string; statusPath?: string; method?: 'GET' | 'POST' };
+
+type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig;
+
+type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http';
+
+const ALL_PERMISSIONS: PermissionFlag[] = [
+  'control:plugs', 'control:lights', 'control:wol',
+  'view:proxmox', 'control:proxmox', 'view:rdp', 'view:ssh', 'control:http',
+];
+
+type DeviceRecord = {
+  id: string;
+  name: string;
+  room?: string;
+  icon?: string;
+  config: DeviceConfig;
+  requiredPermissions: PermissionFlag[];
+};
+
+// ── Widget types ──────────────────────────────────────────────────────────────
+
+type WidgetLayout = { col: number; row: number; w: number; h: number };
+
+type ClockWidgetConfig        = { type: 'clock';         format?: '12h' | '24h'; showSeconds?: boolean; showDate?: boolean };
+type WeatherWidgetConfig      = { type: 'weather';       location?: string; unit?: 'C' | 'F' };
+type DeviceToggleWidgetConfig = { type: 'device_toggle'; deviceId: string };
+type WolButtonWidgetConfig    = { type: 'wol_button';    deviceId: string; label?: string };
+type ProxmoxVmsWidgetConfig   = { type: 'proxmox_vms';   deviceId: string };
+type NoteWidgetConfig         = { type: 'note';          content: string; title?: string };
+type QuickActionsWidgetConfig = { type: 'quick_actions'; deviceIds: string[] };
+
+type WidgetConfig = ClockWidgetConfig | WeatherWidgetConfig | DeviceToggleWidgetConfig | WolButtonWidgetConfig | ProxmoxVmsWidgetConfig | NoteWidgetConfig | QuickActionsWidgetConfig;
+
+type WidgetRecord = { id: string; userId: string; layout: WidgetLayout; config: WidgetConfig };
+
 type UserRecord = {
   id: Uint8Array<ArrayBufferLike>;
   email: string;
@@ -110,6 +156,10 @@ const sessions = new Map<string, SessionEntry>();
 
 type InviteRecord = { email: string; role: UserRole; expiresAt: number; used: boolean };
 const invites = new Map<string, InviteRecord>();
+
+const devices = new Map<string, DeviceRecord>();
+const widgets = new Map<string, WidgetRecord>();
+const userPermissions = new Map<string, PermissionFlag[]>(); // keyed by userId base64url
 
 type SetupState = {
   completed: boolean;
@@ -145,6 +195,9 @@ const serializeState = () => JSON.stringify({
   sessions: [...sessions.entries()],
   invites: [...invites.entries()],
   setupState,
+  devices: [...devices.entries()],
+  widgets: [...widgets.entries()],
+  userPermissions: [...userPermissions.entries()],
 });
 
 const hydrateState = (payload: any) => {
@@ -170,6 +223,12 @@ const hydrateState = (payload: any) => {
   }
   for (const [k, v] of payload.invites ?? []) invites.set(k, v);
   Object.assign(setupState, payload.setupState ?? {});
+  devices.clear();
+  widgets.clear();
+  userPermissions.clear();
+  for (const [k, v] of payload.devices ?? []) devices.set(k, v as DeviceRecord);
+  for (const [k, v] of payload.widgets ?? []) widgets.set(k, v as WidgetRecord);
+  for (const [k, v] of payload.userPermissions ?? []) userPermissions.set(k, v as PermissionFlag[]);
 };
 
 const persistState = async () => {
@@ -626,6 +685,214 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/health', (_req, res) => {
   res.json({ ok: true, rpID: getEffectiveRPID(), rpName, origin: getEffectiveOrigin(), message: 'Passkey auth server is running' });
+});
+
+// ── Wake-on-LAN ───────────────────────────────────────────────────────────────
+
+const sendWOL = (mac: string, broadcastIp = '255.255.255.255', port = 9): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const macHex = mac.replace(/[:\-]/g, '');
+    if (macHex.length !== 12) { reject(new Error('Invalid MAC address')); return; }
+    const macBytes = Buffer.from(macHex, 'hex');
+    const magic = Buffer.alloc(102);
+    magic.fill(0xff, 0, 6);
+    for (let i = 0; i < 16; i++) macBytes.copy(magic, 6 + i * 6);
+    const socket = dgram.createSocket('udp4');
+    socket.once('error', (e) => { socket.close(); reject(e); });
+    socket.bind(() => {
+      socket.setBroadcast(true);
+      socket.send(magic, 0, magic.length, port, broadcastIp, (err) => {
+        socket.close();
+        if (err) reject(err); else resolve();
+      });
+    });
+  });
+
+// ── Device routes ─────────────────────────────────────────────────────────────
+
+const userHasDeviceAccess = (userId: string, role: UserRole, device: DeviceRecord): boolean => {
+  if (role === 'root' || role === 'admin') return true;
+  const perms = userPermissions.get(userId) ?? [];
+  return device.requiredPermissions.every((p) => perms.includes(p));
+};
+
+app.get('/api/devices', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const list = [...devices.values()].filter((d) => userHasDeviceAccess(userId, user.role, d));
+  return res.json({ devices: list });
+});
+
+app.post('/api/devices', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord>;
+  if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
+  const id = crypto.randomBytes(12).toString('base64url');
+  const device: DeviceRecord = { id, name, room, icon, config, requiredPermissions: requiredPermissions ?? [] };
+  devices.set(id, device);
+  void persistState();
+  return res.status(201).json({ device });
+});
+
+app.patch('/api/devices/:id', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const device = devices.get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord>;
+  if (name !== undefined) device.name = name;
+  if (room !== undefined) device.room = room;
+  if (icon !== undefined) device.icon = icon;
+  if (config !== undefined) device.config = config;
+  if (requiredPermissions !== undefined) device.requiredPermissions = requiredPermissions;
+  void persistState();
+  return res.json({ device });
+});
+
+app.delete('/api/devices/:id', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!devices.has(req.params.id)) return res.status(404).json({ error: 'Device not found' });
+  devices.delete(req.params.id);
+  void persistState();
+  return res.json({ ok: true });
+});
+
+app.post('/api/devices/:id/action', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const device = devices.get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  if (!userHasDeviceAccess(userId, user.role, device)) return res.status(403).json({ error: 'Permission denied' });
+
+  const { action, vmId, vmAction } = req.body as { action?: string; vmId?: string; vmAction?: string };
+
+  try {
+    const cfg = device.config;
+    if (cfg.type === 'shelly_plug' || cfg.type === 'shelly_light') {
+      const channel = (cfg as ShellyPlugConfig).channel ?? 0;
+      const relayPath = cfg.type === 'shelly_plug' ? 'relay' : 'light';
+      if (action === 'on' || action === 'off' || action === 'toggle') {
+        const r = await fetch(`http://${cfg.ip}/${relayPath}/${channel}?turn=${action}`);
+        return res.json(await r.json());
+      }
+      if (action === 'status') {
+        const r = await fetch(`http://${cfg.ip}/${relayPath}/${channel}`);
+        return res.json(await r.json());
+      }
+      return res.status(400).json({ error: 'Supported actions: on, off, toggle, status' });
+    }
+
+    if (cfg.type === 'wol') {
+      if (action !== 'wake') return res.status(400).json({ error: 'WOL only supports wake' });
+      await sendWOL(cfg.mac, cfg.broadcastIp, cfg.port);
+      return res.json({ ok: true });
+    }
+
+    if (cfg.type === 'proxmox') {
+      const agent = new httpsModule.Agent({ rejectUnauthorized: !cfg.allowSelfSigned });
+      const base = `https://${cfg.ip}:${cfg.port ?? 8006}/api2/json`;
+      const node = cfg.node ?? 'pve';
+      const headers: Record<string, string> = { Authorization: `PVEAPIToken=${cfg.tokenId}=${cfg.tokenSecret}` };
+      if (action === 'list_vms') {
+        const r = await fetch(`${base}/nodes/${node}/qemu`, { headers, agent: agent as any } as any);
+        if (!r.ok) return res.status(502).json({ error: 'Proxmox API error', status: r.status });
+        return res.json(await r.json());
+      }
+      if (vmId && vmAction && ['start', 'stop', 'reboot', 'shutdown'].includes(vmAction)) {
+        const r = await fetch(`${base}/nodes/${node}/qemu/${vmId}/status/${vmAction}`, {
+          method: 'POST', headers, agent: agent as any,
+        } as any);
+        return res.json(await r.json());
+      }
+      return res.status(400).json({ error: 'Use action=list_vms or provide vmId+vmAction' });
+    }
+
+    if (cfg.type === 'rdp' || cfg.type === 'ssh') {
+      const protocol = cfg.type;
+      const port = cfg.port ?? (protocol === 'rdp' ? 3389 : 22);
+      const url = `${protocol}://${(cfg as RdpConfig).username ? `${(cfg as RdpConfig).username}@` : ''}${cfg.ip}:${port}`;
+      return res.json({ ok: true, url });
+    }
+
+    if (cfg.type === 'http') {
+      const actionPath = action === 'on' ? cfg.onPath : (cfg.offPath ?? cfg.onPath);
+      const method = cfg.method ?? 'GET';
+      const r = await fetch(`http://${cfg.ip}${actionPath}`, { method });
+      return res.json({ ok: true, status: r.status });
+    }
+
+    return res.status(400).json({ error: 'Unknown device type' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Device action failed';
+    console.error('device action error', msg);
+    return res.status(502).json({ error: msg });
+  }
+});
+
+// ── Widget routes ─────────────────────────────────────────────────────────────
+
+app.get('/api/widgets', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  return res.json({ widgets: [...widgets.values()].filter((w) => w.userId === userId) });
+});
+
+app.post('/api/widgets', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const { layout, config } = req.body as { layout?: WidgetLayout; config?: WidgetConfig };
+  if (!layout || !config || !config.type) return res.status(400).json({ error: 'layout and config.type required' });
+  const id = crypto.randomBytes(12).toString('base64url');
+  const widget: WidgetRecord = { id, userId, layout, config };
+  widgets.set(id, widget);
+  void persistState();
+  return res.status(201).json({ widget });
+});
+
+app.patch('/api/widgets/:id', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const widget = widgets.get(req.params.id);
+  if (!widget) return res.status(404).json({ error: 'Widget not found' });
+  if (widget.userId !== userId && !isAdmin(req)) return res.status(403).json({ error: 'Not your widget' });
+  const { layout, config } = req.body as { layout?: WidgetLayout; config?: WidgetConfig };
+  if (layout) widget.layout = layout;
+  if (config) widget.config = config;
+  void persistState();
+  return res.json({ widget });
+});
+
+app.delete('/api/widgets/:id', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const widget = widgets.get(req.params.id);
+  if (!widget) return res.status(404).json({ error: 'Widget not found' });
+  if (widget.userId !== userId && !isAdmin(req)) return res.status(403).json({ error: 'Not your widget' });
+  widgets.delete(req.params.id);
+  void persistState();
+  return res.json({ ok: true });
+});
+
+// ── Permission routes ─────────────────────────────────────────────────────────
+
+app.get('/api/admin/users/:userId/permissions', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  return res.json({ permissions: userPermissions.get(req.params.userId) ?? [] });
+});
+
+app.put('/api/admin/users/:userId/permissions', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const { permissions } = req.body as { permissions?: string[] };
+  if (!Array.isArray(permissions)) return res.status(400).json({ error: 'permissions array required' });
+  const safe = permissions.filter((p): p is PermissionFlag => ALL_PERMISSIONS.includes(p as PermissionFlag));
+  userPermissions.set(req.params.userId, safe);
+  void persistState();
+  return res.json({ ok: true, permissions: safe });
 });
 
 // ── Static frontend ───────────────────────────────────────────────────────────
