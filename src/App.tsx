@@ -8,7 +8,7 @@ type ThemeMode = 'light' | 'dark' | 'ultra-dark';
 type SessionUser = { id: string; email: string; role: Role; avatarUrl?: string };
 type SetupStatus = {
   completed: boolean; dashboardName: string; theme: ThemeMode; accent: string;
-  setupStarted: boolean; backupPasswordAccepted: boolean;
+  setupStarted: boolean; backupPasswordAccepted: boolean; rootEmail: string | null;
 };
 type AdminUser = { id: string; email: string; role: Role; hasPasskey: boolean };
 
@@ -222,10 +222,10 @@ const readErr = async (r: Response, fallback: string) => {
 
 // ── Setup Wizard ─────────────────────────────────────────────────────────────
 
-function SetupWizard({ onDone, initStep }: { onDone: () => void; initStep: number }) {
+function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; initStep: number; initEmail: string }) {
   const [step, setStep] = useState(initStep);
   const [animKey, setAnimKey] = useState(0);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initEmail);
   const [dashboardName, setDashboardName] = useState('SM Dashboard');
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [accent, setAccent] = useState('#007AFF');
@@ -351,10 +351,14 @@ function SetupWizard({ onDone, initStep }: { onDone: () => void; initStep: numbe
                   <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
                   <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel mit Face ID, Touch ID oder PIN. Keine Passwörter nötig.</p>
                 </div>
-                <div className={`rounded-xl p-4 text-sm ${t.inputBg} ${t.muted} space-y-1.5`}>
-                  <p>📧 {email}</p>
-                  <p className="text-xs opacity-70">Dein Root-Konto</p>
-                </div>
+                <button onClick={() => go(1)}
+                  className={`flex w-full items-center gap-3 rounded-xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
+                  <span className="text-base">📧</span>
+                  <div>
+                    <p className={`text-sm font-medium ${t.text}`}>{email}</p>
+                    <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
+                  </div>
+                </button>
                 <StatusMsg msg={status} t={t} />
                 <Btn accent={accent} className="w-full" onClick={registerPasskey} loading={loading}>
                   Passkey erstellen
@@ -858,7 +862,7 @@ export default function App() {
   );
 
   if (!setup.completed) {
-    return <SetupWizard initStep={initStep} onDone={() => window.location.reload()} />;
+    return <SetupWizard initStep={initStep} initEmail={setup.rootEmail ?? ''} onDone={() => window.location.reload()} />;
   }
   if (!user && inviteToken) {
     return <InvitePage setup={setup} inviteToken={inviteToken} initEmail={inviteEmail} />;
