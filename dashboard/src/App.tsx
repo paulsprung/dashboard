@@ -304,15 +304,17 @@ function Input({
   useEffect(() => { if (autoFocus) setTimeout(() => ref.current?.focus(), 80); }, [autoFocus]);
   return (
     <div className="space-y-1.5">
-      {label && <label className={`block text-sm font-medium ${t.muted}`}>{label}</label>}
+      {label && (
+        <label className={`block text-[13px] font-medium ${t.muted}`}>{label}</label>
+      )}
       <input
         ref={ref}
         type={type} value={value} placeholder={placeholder}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className={`focus-accent w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-all
-          ${t.inputBg} ${t.inputText} ${t.inputBorder} disabled:opacity-50`}
-        style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+        className={`focus-accent w-full rounded-[12px] px-4 py-3 text-[15px] leading-snug outline-none transition-all
+          ${t.inputBg} ${t.inputText} disabled:opacity-50`}
+        style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}
       />
       {hint && <p className={`text-xs ${t.muted}`}>{hint}</p>}
     </div>
@@ -1536,22 +1538,50 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
   );
 }
 
-// ── Auth pages ───────────────────────────────────────────────────────────────
+// ── Auth pages ───────────────────────────────────────────────
 
 function AuthPage({ title, sub, children, accent, t }: {
   title: string; sub: string; children: React.ReactNode;
   accent: string; t: ReturnType<typeof tok>;
 }) {
   return (
-    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 animate-fade-in`}>
-      <div className="w-full max-w-sm space-y-6 animate-slide-up">
-        <div className="text-center">
-          <img src="/logo.svg" alt="Logo" className="mx-auto mb-4 h-11 w-11 rounded-[14px]"
-            style={{ boxShadow: `0 4px 14px ${accent}44` }} />
-          <h1 className={`text-2xl font-semibold tracking-tight ${t.text}`}>{title}</h1>
-          <p className={`mt-1 text-sm ${t.muted}`}>{sub}</p>
+    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 relative overflow-hidden`}
+      style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}>
+
+      {/* Ambient radial glow */}
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse 90% 55% at 50% -5%, ${accent}22 0%, transparent 65%)`,
+      }} />
+      <div style={{
+        position: 'fixed', bottom: '-20%', left: '50%', transform: 'translateX(-50%)',
+        width: '60%', height: '40%', pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at center, ${accent}10 0%, transparent 70%)`,
+        filter: 'blur(40px)',
+      }} />
+
+      {/* Logo + title */}
+      <div className="relative z-10 mb-8 flex flex-col items-center animate-spring-in">
+        <div className="mb-5 flex items-center justify-center w-[76px] h-[76px] rounded-[22px]"
+          style={{
+            background: `linear-gradient(145deg, ${accent}EE 0%, ${accent}BB 100%)`,
+            boxShadow: `0 8px 32px ${accent}55, 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25)`,
+          }}>
+          <img src="/logo.svg" alt="Logo" className="w-[44px] h-[44px]" />
         </div>
-        <Card t={t} accent={accent} className="p-7">{children}</Card>
+        <h1 className={`text-[28px] font-semibold tracking-[-0.5px] ${t.text}`}>{title}</h1>
+        <p className={`mt-1 text-[15px] ${t.muted}`}>{sub}</p>
+      </div>
+
+      {/* Card */}
+      <div className="relative z-10 w-full max-w-[360px] animate-spring-in delay-2">
+        <div className={`rounded-[24px] border backdrop-blur-2xl px-7 py-7 ${t.card} ${t.border}`}
+          style={{
+            boxShadow: `0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)`,
+            borderColor: `${accent}20`,
+          }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -1585,14 +1615,31 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
 
   return (
     <AuthPage title={setup.dashboardName} sub="Melde dich mit deinem Passkey an" accent={accent} t={t}>
-      <div className="space-y-4">
-        <Input label="E-Mail" value={email} onChange={setEmail}
-          placeholder="du@beispiel.de" type="email" t={t} accent={accent} autoFocus />
+      <div className="space-y-3">
+        <input
+          type="email" value={email} autoFocus
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
+          placeholder="E-Mail Adresse"
+          className={`focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all ${t.inputBg} ${t.inputText}`}
+          style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}
+        />
         <StatusMsg msg={status} t={t} />
-        <Btn accent={accent} className="w-full" onClick={signIn}
-          loading={loading} disabled={!email.includes('@')}>
-          Mit Passkey anmelden
-        </Btn>
+        <button
+          onClick={signIn}
+          disabled={!email.includes('@') || loading}
+          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40"
+          style={{ backgroundColor: accent, boxShadow: `0 4px 20px ${accent}60, 0 1px 4px ${accent}40` }}>
+          {loading ? <Spinner size={18} color="white" /> : (
+            <>
+              <FaceIDIcon size={20} />
+              Mit Passkey anmelden
+            </>
+          )}
+        </button>
+        <p className={`text-center text-[12px] pt-1 ${t.muted}`}>
+          Touch ID · Face ID · Sicherheitsschlüssel
+        </p>
       </div>
     </AuthPage>
   );
@@ -1635,18 +1682,21 @@ function InvitePage({ setup, inviteToken, initEmail }: {
         <div className="flex flex-col items-center gap-4 py-2">
           <SuccessCheck color={accent} />
           <div className="text-center">
-            <p className={`font-medium ${t.text}`}>Passkey erstellt</p>
-            <p className={`mt-1 text-sm ${t.muted}`}>Du kannst dich jetzt anmelden. Lade die Seite neu.</p>
+            <p className={`font-semibold ${t.text}`}>Passkey erstellt</p>
+            <p className={`mt-1 text-[13px] ${t.muted}`}>Du kannst dich jetzt anmelden.</p>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Input label="E-Mail" value={email} onChange={setEmail} t={t} accent={accent} />
           <StatusMsg msg={status} t={t} />
-          <Btn accent={accent} className="w-full" onClick={register}
-            loading={loading} disabled={!email.includes('@')}>
-            Passkey erstellen
-          </Btn>
+          <button
+            onClick={register}
+            disabled={!email.includes('@') || loading}
+            className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40"
+            style={{ backgroundColor: accent, boxShadow: `0 4px 20px ${accent}60` }}>
+            {loading ? <Spinner size={18} color="white" /> : 'Passkey erstellen'}
+          </button>
         </div>
       )}
     </AuthPage>
@@ -1944,12 +1994,16 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   if (devices.length === 0) {
     return (
       <div className="animate-slide-right">
-        <h1 className={`text-xl font-semibold ${t.text}`}>Geräte</h1>
-        <p className={`mt-1 text-sm ${t.muted}`}>Verbundene Geräte und Steuerung.</p>
-        <div className={`mt-6 rounded-2xl border p-12 text-center ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
-          <p className="text-4xl mb-3">📱</p>
-          <p className={`font-medium ${t.text}`}>Noch keine Geräte</p>
-          <p className={`mt-1 text-sm ${t.muted}`}>Geräte können in den Einstellungen hinzugefügt werden.</p>
+        <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Geräte</h1>
+        <p className={`mt-1 text-[14px] ${t.muted}`}>Verbundene Geräte und Steuerung.</p>
+        <div className={`mt-6 rounded-[18px] border border-dashed p-16 text-center ${t.border}`}
+          style={{ borderColor: `${accent}25` }}>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px]"
+            style={{ backgroundColor: `${accent}15` }}>
+            <IcGrid size={24} />
+          </div>
+          <p className={`font-semibold ${t.text}`}>Noch keine Geräte</p>
+          <p className={`mt-1 text-[13px] ${t.muted}`}>Geräte können in den Einstellungen hinzugefügt werden.</p>
         </div>
       </div>
     );
@@ -1958,87 +2012,102 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   const rooms = [...new Set(devices.map((d) => d.room ?? 'Allgemein'))];
 
   return (
-    <div className="animate-slide-right space-y-5">
+    <div className="animate-slide-right space-y-6">
       <div>
-        <h1 className={`text-xl font-semibold ${t.text}`}>Geräte</h1>
-        <p className={`text-sm ${t.muted}`}>{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
+        <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Geräte</h1>
+        <p className={`text-[14px] ${t.muted}`}>{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
       </div>
 
       {rooms.map((room) => (
         <div key={room}>
-          <p className={`mb-2 text-xs font-semibold uppercase tracking-widest ${t.muted}`} style={{ color: `${accent}AA` }}>{room}</p>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em]"
+            style={{ color: `${accent}CC` }}>{room}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => (
-              <div key={device.id}
-                className={`rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-px ${t.border} ${t.inputBg}`}
-                style={{ ...panelStyle(accent, t), animationDelay: `${i * 40}ms` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className={`font-medium ${t.text}`}>{device.name}</p>
-                      {statuses[device.id] && (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                          statuses[device.id].online
-                            ? 'bg-green-500/15 text-green-500'
-                            : 'bg-red-500/15 text-red-500'
-                        }`}>
-                          <span className={`h-1 w-1 rounded-full ${statuses[device.id].online ? 'bg-green-500' : 'bg-red-500'}`} />
-                          {statuses[device.id].online
-                            ? `${statuses[device.id].latencyMs}ms`
-                            : 'offline'}
-                        </span>
-                      )}
+            {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => {
+              const st = statuses[device.id];
+              return (
+                <div key={device.id}
+                  className={`group rounded-[18px] border p-4 transition-all duration-200
+                    hover:shadow-lg hover:-translate-y-0.5 animate-float-in ${t.border} ${t.inputBg} delay-${Math.min(i, 6)}`}
+                  style={{ borderColor: `${accent}18` }}>
+
+                  {/* Header row */}
+                  <div className="flex items-start justify-between mb-4">
+                    {/* Icon circle */}
+                    <div className="flex h-11 w-11 items-center justify-center rounded-[14px] text-xl shrink-0"
+                      style={{
+                        background: `linear-gradient(145deg, ${accent}25 0%, ${accent}15 100%)`,
+                        boxShadow: `inset 0 1px 0 ${accent}30`,
+                      }}>
+                      {device.icon ?? deviceTypeIcon(device.type)}
                     </div>
-                    <p className={`text-xs ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+
+                    {/* Status pill */}
+                    {st && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        st.online ? 'text-[#30D158]' : 'text-[#FF3B30]'
+                      }`} style={{ backgroundColor: st.online ? '#30D15820' : '#FF3B3020' }}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${st.online ? 'bg-[#30D158]' : 'bg-[#FF3B30]'}`}
+                          style={st.online ? { animation: 'statusPulse 2s ease-in-out infinite' } : {}} />
+                        {st.online ? (st.latencyMs != null ? `${st.latencyMs}ms` : 'online') : 'offline'}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.type)}</span>
-                </div>
 
-                {actionStatus[device.id] && (
-                  <p className={`text-xs mb-2 ${actionStatus[device.id].startsWith('✗') ? 'text-red-500' : 'text-green-500'}`}>
-                    {actionStatus[device.id]}
-                  </p>
-                )}
+                  {/* Name + type */}
+                  <div className="mb-3">
+                    <p className={`text-[14px] font-semibold leading-snug ${t.text}`}>{device.name}</p>
+                    <p className={`text-[12px] ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+                  </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                      <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
-                    </>
+                  {/* Action feedback */}
+                  {actionStatus[device.id] && (
+                    <p className={`text-[12px] mb-2 font-medium ${actionStatus[device.id].startsWith('✗') ? 'text-[#FF3B30]' : 'text-[#30D158]'}`}>
+                      {actionStatus[device.id]}
+                    </p>
                   )}
-                  {device.type === 'wol' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
-                  )}
-                  {device.type === 'proxmox' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
-                  )}
-                  {(device.type === 'rdp' || device.type === 'ssh') && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
-                  )}
-                  {device.type === 'http' && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                    </>
-                  )}
-                  {device.type === 'tasmota' && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                      <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
-                    </>
-                  )}
-                  {device.type === 'docker' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
-                  )}
-                  {device.type === 'tailscale' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
-                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
+                      </>
+                    )}
+                    {device.type === 'wol' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
+                    )}
+                    {device.type === 'proxmox' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
+                    )}
+                    {(device.type === 'rdp' || device.type === 'ssh') && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
+                    )}
+                    {device.type === 'http' && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                      </>
+                    )}
+                    {device.type === 'tasmota' && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
+                      </>
+                    )}
+                    {device.type === 'docker' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
+                    )}
+                    {device.type === 'tailscale' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
@@ -2482,55 +2551,92 @@ function Dashboard({ user, setup, onSignOut }: {
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${t.page} p-3 md:p-4 animate-fade-in`}
-      style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}>
+      style={{ '--accent-ring': `${accent}45`, '--accent-color': accent } as React.CSSProperties}>
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] gap-3 md:gap-4">
 
-        {/* Sidebar */}
-        <aside className={`flex w-[220px] shrink-0 flex-col rounded-2xl border backdrop-blur-xl
-          transition-shadow duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}15`, borderColor: `${accent}1A` }}>
-          <div className={`border-b px-4 py-4 ${t.divider}`}>
-            <div className="flex items-center gap-2.5">
-              <img src="/logo.svg" alt="Logo" className="h-8 w-8 rounded-xl"
-                style={{ boxShadow: `0 2px 8px ${accent}44` }} />
-              <span className={`text-sm font-semibold ${t.text}`}>{setup.dashboardName}</span>
+        {/* ── Sidebar ────────────────────────────────────── */}
+        <aside className={`flex w-[220px] shrink-0 flex-col rounded-[22px] border backdrop-blur-2xl
+          transition-all duration-300 ${t.card} ${t.border}`}
+          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 rgba(255,255,255,0.06)`, borderColor: `${accent}1A` }}>
+
+          {/* Logo + name */}
+          <div className={`border-b px-4 pt-5 pb-4 ${t.divider}`}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-[11px] shrink-0"
+                style={{
+                  background: `linear-gradient(145deg, ${accent}EE, ${accent}AA)`,
+                  boxShadow: `0 3px 10px ${accent}50`,
+                }}>
+                <img src="/logo.svg" alt="Logo" className="h-5 w-5" />
+              </div>
+              <span className={`text-[14px] font-semibold tracking-[-0.1px] ${t.text}`}>{setup.dashboardName}</span>
             </div>
           </div>
 
+          {/* Nav */}
           <nav className="flex flex-1 flex-col gap-0.5 p-2">
-            {visibleNav.map((item) => (
-              <button key={item.key} onClick={() => goTab(item.key)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition-all
-                  ${tab === item.key ? t.navActive : t.navHover} ${t.text}`}
-                style={tab === item.key ? { color: accent } : {}}>
-                <span className="text-base leading-none">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {visibleNav.map((item, i) => {
+              const active = tab === item.key;
+              return (
+                <button key={item.key} onClick={() => goTab(item.key)}
+                  className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-[9px] text-left text-[13.5px] font-medium
+                    transition-all duration-150 animate-slide-left delay-${i + 1}`}
+                  style={active ? {
+                    backgroundColor: accent,
+                    color: 'white',
+                    boxShadow: `0 3px 10px ${accent}50`,
+                  } : { color: 'var(--t-muted)' }}>
+                  <span className={`flex-shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`}>
+                    {item.icon}
+                  </span>
+                  <span className={active ? 'text-white' : t.text}>{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
+          {/* Settings nav item */}
+          <div className={`border-t px-2 pt-1.5 pb-1.5 ${t.divider}`}>
+            <button onClick={() => goTab('settings')}
+              className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-[9px] text-left text-[13.5px] font-medium
+                transition-all duration-150`}
+              style={tab === 'settings' ? {
+                backgroundColor: accent, color: 'white', boxShadow: `0 3px 10px ${accent}50`,
+              } : {}}>
+              <span className={`flex-shrink-0 transition-opacity ${tab === 'settings' ? 'opacity-100' : 'opacity-55'}`}>
+                <IcGear />
+              </span>
+              <span className={tab === 'settings' ? 'text-white' : t.text}>Einstellungen</span>
+            </button>
+          </div>
+
+          {/* User */}
           <div className={`border-t p-2 ${t.divider}`}>
             <div className="relative">
               <button onClick={() => setProfileOpen((v) => !v)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all ${t.navHover}`}>
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  style={{ backgroundColor: accent }}>
+                className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-left transition-all duration-150 ${t.navHover}`}>
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${accent} 0%, ${accent}CC 100%)`,
+                    boxShadow: `0 2px 6px ${accent}44`,
+                  }}>
                   {user.email[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className={`truncate text-xs font-medium ${t.text}`}>{user.email}</p>
-                  <p className={`text-[10px] capitalize ${t.muted}`}>{user.role}</p>
+                  <p className={`truncate text-[12px] font-medium ${t.text}`}>{user.email}</p>
+                  <p className={`text-[11px] capitalize ${t.muted}`}>{user.role}</p>
                 </div>
               </button>
               {profileOpen && (
-                <div className={`absolute bottom-full left-0 mb-1 w-full rounded-xl border p-1
-                  ${t.card} ${t.border} animate-slide-up`} style={{ boxShadow: t.shadow }}>
-                  <button onClick={() => goTab('settings')}
-                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition-all ${t.navHover} ${t.text}`}>
-                    Einstellungen
-                  </button>
+                <div className={`absolute bottom-full left-0 mb-1.5 w-full rounded-[14px] border p-1.5
+                  ${t.card} ${t.border} animate-spring-in material-thick`}
+                  style={{ boxShadow: t.shadowLg }}>
                   <button onClick={signOut}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-xs text-red-500 transition-all hover:bg-red-500/10">
+                    className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] font-medium text-[#FF3B30] transition-all hover:bg-[#FF3B30]/10">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25z" clipRule="evenodd"/>
+                      <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-1.16a.75.75 0 1 1 1.104-1.02l2.5 2.75a.75.75 0 0 1 0 1.02l-2.5 2.75a.75.75 0 1 1-1.104-1.02l1.048-1.16H6.75A.75.75 0 0 1 6 10z" clipRule="evenodd"/>
+                    </svg>
                     Abmelden
                   </button>
                 </div>
@@ -2539,33 +2645,38 @@ function Dashboard({ user, setup, onSignOut }: {
           </div>
         </aside>
 
-        {/* Content */}
-        <main className={`min-w-0 flex-1 rounded-2xl border backdrop-blur-xl p-5 md:p-6
-          transition-shadow duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}12`, borderColor: `${accent}18` }}>
+        {/* ── Content ────────────────────────────────────── */}
+        <main className={`min-w-0 flex-1 rounded-[22px] border backdrop-blur-xl p-5 md:p-6
+          transition-all duration-300 ${t.card} ${t.border}`}
+          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 rgba(255,255,255,0.04)`, borderColor: `${accent}18` }}>
 
           {tab === 'home' && (
-            <div className="animate-slide-right space-y-4">
+            <div className="animate-slide-right space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className={`text-xl font-semibold ${t.text}`}>Übersicht</h1>
-                  <p className={`text-sm ${t.muted}`}>Guten Tag, {user.email.split('@')[0]}</p>
+                  <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Übersicht</h1>
+                  <p className={`text-[14px] ${t.muted}`}>Guten Tag, {user.email.split('@')[0]}</p>
                 </div>
                 <Btn accent={accent} size="sm" variant="secondary" onClick={() => setShowAddWidget(true)}>+ Widget</Btn>
               </div>
 
               {showAddWidget && (
-                <div className={`rounded-2xl border p-5 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
-                  <p className={`mb-4 font-medium ${t.text}`}>Widget hinzufügen</p>
+                <div className={`rounded-[18px] border p-5 ${t.border} ${t.inputBg}`}
+                  style={{ borderColor: `${accent}20` }}>
+                  <p className={`mb-4 font-semibold ${t.text}`}>Widget hinzufügen</p>
                   <WidgetForm onSave={addWidget} onCancel={() => setShowAddWidget(false)} devices={devices} t={t} accent={accent} />
                 </div>
               )}
 
               {widgets.length === 0 && !showAddWidget && (
-                <div className={`rounded-2xl border border-dashed p-12 text-center ${t.border}`}>
-                  <p className="text-4xl mb-3">🧩</p>
-                  <p className={`font-medium ${t.text}`}>Keine Widgets</p>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
+                <div className={`rounded-[18px] border border-dashed p-16 text-center ${t.border}`}
+                  style={{ borderColor: `${accent}25` }}>
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px]"
+                    style={{ backgroundColor: `${accent}15` }}>
+                    <IcGrid size={24} />
+                  </div>
+                  <p className={`font-semibold ${t.text}`}>Keine Widgets</p>
+                  <p className={`mt-1 text-[13px] ${t.muted}`}>Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
                 </div>
               )}
 
@@ -2575,8 +2686,7 @@ function Dashboard({ user, setup, onSignOut }: {
                   const rowH = widget.layout.h === 1 ? 'h-32' : widget.layout.h === 2 ? 'h-44' : 'h-64';
                   return (
                     <div key={widget.id}
-                      className={`col-span-12 md:col-span-${colSpan} animate-slide-up`}
-                      style={{ animationDelay: `${i * 40}ms` }}>
+                      className={`col-span-12 md:col-span-${colSpan} animate-slide-up delay-${Math.min(i, 6)}`}>
                       <div className={rowH}>
                         <WidgetRenderer widget={widget} devices={devices} t={t} accent={accent}
                           onRemove={() => removeWidget(widget.id)} statuses={monitorStatuses} />
