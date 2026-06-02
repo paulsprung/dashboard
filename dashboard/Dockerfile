@@ -1,17 +1,18 @@
-FROM node:22-alpine AS build
+# Stage 1 — build Vite frontend + compile Express server TypeScript
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
-RUN npm run build
+RUN npm run build && npm run build:server
 
-FROM node:22-alpine AS runtime
+# Stage 2 — lean runtime (no TypeScript, no Vite, no dev deps, no source)
+FROM node:22-alpine
 WORKDIR /app
+ENV NODE_ENV=production PORT=3001
 COPY package*.json ./
-RUN npm ci --omit=dev
-COPY server ./server
-COPY --from=build /app/dist ./dist
-ENV NODE_ENV=production
-ENV PORT=3001
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist-server ./dist-server
 EXPOSE 3001
-CMD ["npm", "run", "server:start"]
+CMD ["node", "dist-server/index.js"]

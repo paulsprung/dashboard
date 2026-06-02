@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:server": "tsc -p server/tsconfig.json",
     "preview": "vite preview",
     "server:dev": "tsx watch server/index.ts",
-    "server:start": "tsx server/index.ts"
+    "server:start": "node dist-server/index.js"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.2.2",
@@ -19,8 +20,7 @@
     "express-rate-limit": "^8.5.1",
     "pg": "^8.13.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tsx": "^4.19.2"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -33,6 +33,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.8"
   }
