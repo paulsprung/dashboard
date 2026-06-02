@@ -447,6 +447,60 @@ npm run dev
 
 ---
 
+## Hardening a shared Hetzner host
+
+If your Hetzner box **only** runs the dashboard, the default `compose.yml` is fine.
+But if the same server also hosts other services (a website, a TeamSpeak/game server,
+etc.), there's a real risk: those services share the host, and if Tailscale runs on the
+**host**, a compromise of *any* of them could pivot through Tailscale to the Pi.
+
+Close that off with two layers:
+
+### Layer 1 — Tailscale ACL (do this regardless)
+
+Tag the two machines and allow the Hetzner node to reach **only** the Pi agent port.
+Even if an attacker lands on the host, they can't reach anything else on the tailnet —
+not your personal devices, not SSH, just `100.x:3002` (which still needs `AGENT_SECRET`).
+
+In the Tailscale admin console (Access Controls):
+
+```json
+{
+  "tagOwners": {
+    "tag:hetzner": ["autogroup:admin"],
+    "tag:pi":      ["autogroup:admin"]
+  },
+  "acls": [
+    { "action": "accept", "src": ["tag:hetzner"], "dst": ["tag:pi:3002"] }
+  ]
+}
+```
+
+Tag the Pi as `tag:pi` (`tailscale up --advertise-tags=tag:pi`) and use a `tag:hetzner`
+auth key for the dashboard. Now `tag:hetzner` literally cannot open any other connection.
+
+### Layer 2 — Tailscale only inside the dashboard container
+
+Run Tailscale as a **sidecar** so the host kernel and sibling containers have no tailnet
+route at all — only the dashboard container does. Use the provided compose file:
+
+```bash
+cd dashboard
+# create a tagged auth key at https://login.tailscale.com/admin/settings/keys (tag:hetzner)
+echo "TS_AUTHKEY=tskey-auth-..." >> .env
+docker compose -f compose.tailscale-sidecar.yml up -d --build
+```
+
+How it works: `sm-dashboard` uses `network_mode: "service:tailscale"`, so it shares the
+sidecar's network namespace and is the *only* container on the tailnet. Your website or
+TeamSpeak container is on the normal Docker network and has **no path** to `100.x`.
+
+Combined, even a fully popped TeamSpeak can't reach the Pi: it has no tailnet route
+(Layer 2), and the dashboard's tailnet identity can only touch `Pi:3002` (Layer 1), which
+in turn requires the shared secret.
+
+---
+
 ## Security Notes
 
 - **Zero-knowledge by default.** With `PI_AGENT_URL` set, Hetzner never stores or sees device IPs, MACs, or tokens — they go straight to the Pi.
@@ -456,3 +510,4 @@ npm run dev
 - **Passkeys + metadata** live in PostgreSQL on Hetzner — back up that volume too.
 - **Proxmox self-signed certs** are accepted by design for internal use. With a valid cert, set `allowSelfSigned: false` on the device.
 - **Two Tailnets** keep a Hetzner breach away from your personal devices.
+- **Shared host?** Run Tailscale as a sidecar + lock the ACL to `Pi:3002` (see "Hardening a shared Hetzner host"), so co-located services can't pivot to the Pi.
