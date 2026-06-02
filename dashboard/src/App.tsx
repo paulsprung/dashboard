@@ -102,58 +102,127 @@ const APPLE_COLORS = [
 function tok(theme: ThemeMode) {
   const t = {
     light: {
-      page:       'bg-[#F2F2F7] text-[#1D1D1F]',
-      card:       'bg-white/90',
-      border:     'border-black/[0.07]',
-      text:       'text-[#1D1D1F]',
-      muted:      'text-[#6E6E73]',
-      inputBg:    'bg-[#F2F2F7]',
-      inputText:  'text-[#1D1D1F] placeholder:text-[#C7C7CC]',
-      inputBorder:'border border-black/[0.1]',
-      divider:    'border-black/[0.06]',
-      navHover:   'hover:bg-black/[0.04]',
-      navActive:  'bg-black/[0.06] font-medium',
-      userCard:   'bg-black/[0.04]',
-      shadow:     '0 2px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.06)',
+      page:        'bg-[#F2F2F7]',
+      card:        'bg-white/88',
+      cardSolid:   'bg-white',
+      border:      'border-black/[0.06]',
+      text:        'text-[#1D1D1F]',
+      label:       'text-[#3C3C43]',
+      muted:       'text-[#8E8E93]',
+      inputBg:     'bg-[#F2F2F7]',
+      inputText:   'text-[#1D1D1F] placeholder:text-[#C7C7CC]',
+      inputBorder: '',
+      divider:     'border-black/[0.055]',
+      navHover:    'hover:bg-black/[0.042] active:bg-black/[0.07]',
+      navActive:   'font-semibold',
+      userCard:    'bg-black/[0.04]',
+      shadow:      '0 4px 24px rgba(0,0,0,0.09), 0 1px 3px rgba(0,0,0,0.05)',
+      shadowSm:    '0 2px 10px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
+      shadowLg:    '0 20px 60px rgba(0,0,0,0.13), 0 6px 16px rgba(0,0,0,0.06)',
     },
     dark: {
-      page:       'bg-[#1C1C1E] text-[#F5F5F7]',
-      card:       'bg-[#2C2C2E]/95',
-      border:     'border-white/[0.08]',
-      text:       'text-[#F5F5F7]',
-      muted:      'text-[#98989F]',
-      inputBg:    'bg-[#3A3A3C]',
-      inputText:  'text-[#F5F5F7] placeholder:text-[#636366]',
-      inputBorder:'border border-transparent',
-      divider:    'border-white/[0.08]',
-      navHover:   'hover:bg-white/[0.06]',
-      navActive:  'bg-white/[0.1] font-medium',
-      userCard:   'bg-white/[0.05]',
-      shadow:     '0 2px 16px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.25)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.2)',
+      page:        'bg-black',
+      card:        'bg-[#1C1C1E]/88',
+      cardSolid:   'bg-[#1C1C1E]',
+      border:      'border-white/[0.1]',
+      text:        'text-[#F5F5F7]',
+      label:       'text-[#EBEBF5CC]',
+      muted:       'text-[#98989F]',
+      inputBg:     'bg-[#2C2C2E]',
+      inputText:   'text-[#F5F5F7] placeholder:text-[#48484A]',
+      inputBorder: '',
+      divider:     'border-white/[0.07]',
+      navHover:    'hover:bg-white/[0.06] active:bg-white/[0.1]',
+      navActive:   'font-semibold',
+      userCard:    'bg-white/[0.05]',
+      shadow:      '0 4px 28px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)',
+      shadowSm:    '0 2px 14px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.22)',
+      shadowLg:    '0 24px 80px rgba(0,0,0,0.75), 0 8px 24px rgba(0,0,0,0.45)',
     },
     'ultra-dark': {
-      page:       'bg-black text-[#F5F5F7]',
-      card:       'bg-[#111111]',
-      border:     'border-white/[0.07]',
-      text:       'text-[#F5F5F7]',
-      muted:      'text-[#6E6E73]',
-      inputBg:    'bg-[#1C1C1E]',
-      inputText:  'text-[#F5F5F7] placeholder:text-[#48484A]',
-      inputBorder:'border border-white/[0.06]',
-      divider:    'border-white/[0.06]',
-      navHover:   'hover:bg-white/[0.06]',
-      navActive:  'bg-white/[0.1] font-medium',
-      userCard:   'bg-white/[0.04]',
-      shadow:     '0 2px 20px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.5)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.4)',
+      page:        'bg-[#050505]',
+      card:        'bg-[#111111]/92',
+      cardSolid:   'bg-[#111111]',
+      border:      'border-white/[0.07]',
+      text:        'text-[#F5F5F7]',
+      label:       'text-[#EBEBF5B3]',
+      muted:       'text-[#6E6E73]',
+      inputBg:     'bg-[#1C1C1E]',
+      inputText:   'text-[#F5F5F7] placeholder:text-[#3A3A3C]',
+      inputBorder: '',
+      divider:     'border-white/[0.06]',
+      navHover:    'hover:bg-white/[0.05] active:bg-white/[0.08]',
+      navActive:   'font-semibold',
+      userCard:    'bg-white/[0.04]',
+      shadow:      '0 4px 32px rgba(0,0,0,0.75), 0 1px 4px rgba(0,0,0,0.5)',
+      shadowSm:    '0 2px 16px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.42)',
+      shadowLg:    '0 28px 100px rgba(0,0,0,0.92), 0 10px 32px rgba(0,0,0,0.65)',
     },
   } as const;
   return t[theme];
 }
 
 // ── Small UI helpers ──────────────────────────────────────────────────────────
+
+// ── SF Symbol-inspired icons ──────────────────────────────────
+
+function IcHome({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <path d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v7a1 1 0 0 1-1 1h-3.5a1 1 0 0 1-1-1v-3.5h-3V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7H2a1 1 0 0 1-.707-1.707l8-8z"/>
+    </svg>
+  );
+}
+
+function IcGrid({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+      <rect x="11" y="2" width="7" height="7" rx="1.5"/>
+      <rect x="2" y="11" width="7" height="7" rx="1.5"/>
+      <rect x="11" y="11" width="7" height="7" rx="1.5"/>
+    </svg>
+  );
+}
+
+function IcRadar({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="10" cy="10" r="8"/>
+      <circle cx="10" cy="10" r="4.5"/>
+      <circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+      <line x1="10" y1="2" x2="10" y2="5.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IcPerson({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="10" cy="6.5" r="3.5"/>
+      <path d="M2.5 18c0-3.866 3.358-7 7.5-7s7.5 3.134 7.5 7H2.5z"/>
+    </svg>
+  );
+}
+
+function IcGear({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" clipRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 0 1-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 0 1 .947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 0 1 2.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 0 1 2.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 0 1 .947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 0 1-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 0 1-2.287-.947zM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+    </svg>
+  );
+}
+
+function FaceIDIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+      <path d="M7 3H4a1 1 0 0 0-1 1v3M17 3h3a1 1 0 0 1 1 1v3M7 21H4a1 1 0 0 1-1-1v-3M17 21h3a1 1 0 0 0 1-1v-3"/>
+      <path d="M9 9v1M15 9v1"/>
+      <path d="M9.5 15.5a3.5 3.5 0 0 0 5 0"/>
+      <path d="M12 9v3.5"/>
+    </svg>
+  );
+}
 
 function Spinner({ size = 18, color = 'currentColor' }: { size?: number; color?: string }) {
   return (
@@ -185,32 +254,40 @@ function Btn({
   disabled?: boolean; variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   accent: string; className?: string; size?: 'sm' | 'md';
 }) {
-  const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
-  const base = `inline-flex items-center justify-center gap-2 rounded-xl ${pad} font-medium transition-all duration-150 hover:brightness-105 active:scale-[0.97] active:brightness-95 disabled:opacity-40 select-none cursor-pointer`;
+  const pad = size === 'sm' ? 'px-3.5 py-[7px] text-[13px]' : 'px-4 py-[10px] text-[14px]';
+  const base = `inline-flex items-center justify-center gap-2 font-medium select-none cursor-pointer
+    transition-all duration-150 ease-out
+    active:scale-[0.96] disabled:opacity-40 disabled:pointer-events-none
+    ${size === 'sm' ? 'rounded-[10px]' : 'rounded-[12px]'} ${pad}`;
   if (variant === 'primary') return (
     <button onClick={onClick} disabled={disabled || loading}
       className={`${base} text-white ${className}`}
-      style={{ backgroundColor: accent, boxShadow: `0 2px 8px ${accent}55` }}>
-      {loading ? <Spinner size={16} color="white" /> : children}
+      style={{ backgroundColor: accent, boxShadow: `0 2px 10px ${accent}60, 0 1px 2px ${accent}30` }}>
+      {loading ? <Spinner size={15} color="white" /> : children}
     </button>
   );
   if (variant === 'danger') return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-white bg-red-500 ${className}`}
-      style={{ boxShadow: '0 2px 8px rgba(239,68,68,0.35)' }}>
-      {loading ? <Spinner size={16} color="white" /> : children}
+      className={`${base} text-white bg-[#FF3B30] ${className}`}
+      style={{ boxShadow: '0 2px 8px rgba(255,59,48,0.4)' }}>
+      {loading ? <Spinner size={15} color="white" /> : children}
     </button>
   );
   if (variant === 'secondary') return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-[#F5F5F7] bg-white/10 border border-white/[0.1] ${className}`}>
-      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
+      className={`${base} border ${className}`}
+      style={{
+        color: accent,
+        borderColor: `${accent}30`,
+        backgroundColor: `${accent}0F`,
+      }}>
+      {loading ? <Spinner size={15} color={accent} /> : children}
     </button>
   );
   return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-[#F5F5F7] opacity-50 hover:opacity-90 ${className}`}>
-      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
+      className={`${base} bg-white/[0.07] border border-white/[0.1] text-[#F5F5F7]/70 hover:text-[#F5F5F7] hover:bg-white/[0.1] ${className}`}>
+      {loading ? <Spinner size={15} color="currentColor" /> : children}
     </button>
   );
 }
@@ -1582,11 +1659,11 @@ type Tab = 'home' | 'devices' | 'discovery' | 'admin' | 'settings';
 
 const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
 
-const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'home',      label: 'Home',      icon: '⌂' },
-  { key: 'devices',   label: 'Geräte',   icon: '◫' },
-  { key: 'discovery', label: 'Discovery', icon: '◎' },
-  { key: 'admin',     label: 'Admin',     icon: '⚙' },
+const NAV: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  { key: 'home',      label: 'Home',      icon: <IcHome /> },
+  { key: 'devices',   label: 'Geräte',   icon: <IcGrid /> },
+  { key: 'discovery', label: 'Discovery', icon: <IcRadar /> },
+  { key: 'admin',     label: 'Admin',     icon: <IcPerson /> },
 ];
 
 // ── Settings panel ────────────────────────────────────────────────────────────
