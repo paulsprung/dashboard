@@ -822,6 +822,25 @@ app.post('/api/devices/:id/action', async (req, res) => {
 
   const { action, vmId, vmAction } = req.body as { action?: string; vmId?: string; vmAction?: string };
 
+  // Forward to Pi Agent if configured — Pi has direct local network access
+  if (process.env.PI_AGENT_URL && process.env.PI_AGENT_SECRET) {
+    try {
+      const r = await fetch(`${process.env.PI_AGENT_URL}/proxy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.PI_AGENT_SECRET}`,
+        },
+        body: JSON.stringify({ config: device.config, action, ...req.body }),
+      });
+      const data = await r.json();
+      return res.status(r.status).json(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Pi Agent unreachable';
+      return res.status(502).json({ error: `Pi Agent error: ${msg}` });
+    }
+  }
+
   try {
     const cfg = device.config;
     if (cfg.type === 'shelly_plug' || cfg.type === 'shelly_light') {
@@ -925,6 +944,46 @@ app.post('/api/devices/:id/action', async (req, res) => {
     const msg = err instanceof Error ? err.message : 'Device action failed';
     console.error('device action error', msg);
     return res.status(502).json({ error: msg });
+  }
+});
+
+// ── Pi Agent discovery proxy ──────────────────────────────────────────────────
+
+app.get('/api/pi-agent/discovered', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!process.env.PI_AGENT_URL || !process.env.PI_AGENT_SECRET) {
+    return res.json({ devices: [], agents: [], configured: false });
+  }
+  try {
+    const [devR, agR] = await Promise.all([
+      fetch(`${process.env.PI_AGENT_URL}/discover/results`, {
+        headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
+      }),
+      fetch(`${process.env.PI_AGENT_URL}/agents`, {
+        headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
+      }),
+    ]);
+    const devices = devR.ok ? await devR.json() : [];
+    const agents = agR.ok ? await agR.json() : [];
+    return res.json({ devices, agents, configured: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+});
+
+app.post('/api/pi-agent/discover', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!process.env.PI_AGENT_URL || !process.env.PI_AGENT_SECRET) {
+    return res.status(400).json({ error: 'Pi Agent not configured' });
+  }
+  try {
+    const r = await fetch(`${process.env.PI_AGENT_URL}/discover`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
+    });
+    return res.json(await r.json());
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
   }
 });
 
