@@ -1545,41 +1545,43 @@ function AuthPage({ title, sub, children, accent, t }: {
   accent: string; t: ReturnType<typeof tok>;
 }) {
   return (
-    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 relative overflow-hidden`}
-      style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      style={{
+        background: 'radial-gradient(ellipse 120% 80% at 50% -10%, #12122a 0%, #000000 55%)',
+        '--accent-ring': `${accent}45`,
+      } as React.CSSProperties}>
 
-      {/* Ambient radial glow */}
+      {/* Deep ambient glow — top */}
       <div style={{
-        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
-        background: `radial-gradient(ellipse 90% 55% at 50% -5%, ${accent}22 0%, transparent 65%)`,
+        position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '70%', height: '50%', pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at top, ${accent}28 0%, transparent 65%)`,
+        filter: 'blur(20px)',
       }} />
+      {/* Subtle bottom reflection */}
       <div style={{
-        position: 'fixed', bottom: '-20%', left: '50%', transform: 'translateX(-50%)',
-        width: '60%', height: '40%', pointerEvents: 'none', zIndex: 0,
-        background: `radial-gradient(ellipse at center, ${accent}10 0%, transparent 70%)`,
-        filter: 'blur(40px)',
+        position: 'fixed', bottom: '-10%', left: '50%', transform: 'translateX(-50%)',
+        width: '50%', height: '30%', pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at center, ${accent}0F 0%, transparent 70%)`,
+        filter: 'blur(30px)',
       }} />
 
-      {/* Logo + title */}
-      <div className="relative z-10 mb-8 flex flex-col items-center animate-spring-in">
-        <div className="mb-5 flex items-center justify-center w-[76px] h-[76px] rounded-[22px]"
+      {/* Logo badge */}
+      <div className="relative z-10 mb-7 flex flex-col items-center animate-spring-in">
+        <div className="mb-5 flex items-center justify-center w-[80px] h-[80px] rounded-[26px]"
           style={{
-            background: `linear-gradient(145deg, ${accent}EE 0%, ${accent}BB 100%)`,
-            boxShadow: `0 8px 32px ${accent}55, 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25)`,
+            background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}BB 100%)`,
+            boxShadow: `0 12px 40px ${accent}60, 0 4px 12px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.2)`,
           }}>
-          <img src="/logo.svg" alt="Logo" className="w-[44px] h-[44px]" />
+          <img src="/logo.svg" alt="Logo" className="w-[46px] h-[46px]" />
         </div>
-        <h1 className={`text-[28px] font-semibold tracking-[-0.5px] ${t.text}`}>{title}</h1>
-        <p className={`mt-1 text-[15px] ${t.muted}`}>{sub}</p>
+        <h1 className="text-[30px] font-semibold tracking-[-0.6px] text-white">{title}</h1>
+        <p className="mt-1.5 text-[15px] text-white/50">{sub}</p>
       </div>
 
-      {/* Card */}
+      {/* Liquid glass card */}
       <div className="relative z-10 w-full max-w-[360px] animate-spring-in delay-2">
-        <div className={`rounded-[24px] border backdrop-blur-2xl px-7 py-7 ${t.card} ${t.border}`}
-          style={{
-            boxShadow: `0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)`,
-            borderColor: `${accent}20`,
-          }}>
+        <div className="glass-card rounded-[28px] px-7 py-7">
           {children}
         </div>
       </div>
@@ -1621,15 +1623,22 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
           placeholder="E-Mail Adresse"
-          className={`focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all ${t.inputBg} ${t.inputText}`}
-          style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}
+          className="focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all text-white placeholder-white/30"
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            '--accent-ring': `${accent}50`,
+          } as React.CSSProperties}
         />
         <StatusMsg msg={status} t={t} />
         <button
           onClick={signIn}
           disabled={!email.includes('@') || loading}
-          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40"
-          style={{ backgroundColor: accent, boxShadow: `0 4px 20px ${accent}60, 0 1px 4px ${accent}40` }}>
+          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-35"
+          style={{
+            background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}CC 100%)`,
+            boxShadow: `0 4px 24px ${accent}60, 0 1px 4px ${accent}40, inset 0 1px 0 rgba(255,255,255,0.25)`,
+          }}>
           {loading ? <Spinner size={18} color="white" /> : (
             <>
               <FaceIDIcon size={20} />
@@ -1637,7 +1646,7 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
             </>
           )}
         </button>
-        <p className={`text-center text-[12px] pt-1 ${t.muted}`}>
+        <p className="text-center text-[12px] pt-1 text-white/35">
           Touch ID · Face ID · Sicherheitsschlüssel
         </p>
       </div>
@@ -1994,16 +2003,16 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   if (devices.length === 0) {
     return (
       <div className="animate-slide-right">
-        <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Geräte</h1>
-        <p className={`mt-1 text-[14px] ${t.muted}`}>Verbundene Geräte und Steuerung.</p>
-        <div className={`mt-6 rounded-[18px] border border-dashed p-16 text-center ${t.border}`}
-          style={{ borderColor: `${accent}25` }}>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px]"
-            style={{ backgroundColor: `${accent}15` }}>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Geräte</h1>
+        <p className="mt-1 text-[14px] text-white/45">Verbundene Geräte und Steuerung.</p>
+        <div className="glass-subtle mt-6 rounded-[20px] p-16 text-center"
+          style={{ borderColor: `${accent}20` }}>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] text-white/30"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
             <IcGrid size={24} />
           </div>
-          <p className={`font-semibold ${t.text}`}>Noch keine Geräte</p>
-          <p className={`mt-1 text-[13px] ${t.muted}`}>Geräte können in den Einstellungen hinzugefügt werden.</p>
+          <p className="font-semibold text-white/70">Noch keine Geräte</p>
+          <p className="mt-1 text-[13px] text-white/35">Geräte können in den Einstellungen hinzugefügt werden.</p>
         </div>
       </div>
     );
@@ -2014,41 +2023,45 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   return (
     <div className="animate-slide-right space-y-6">
       <div>
-        <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Geräte</h1>
-        <p className={`text-[14px] ${t.muted}`}>{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Geräte</h1>
+        <p className="text-[14px] text-white/45">{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
       </div>
 
       {rooms.map((room) => (
         <div key={room}>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em]"
-            style={{ color: `${accent}CC` }}>{room}</p>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">{room}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => {
               const st = statuses[device.id];
               return (
                 <div key={device.id}
-                  className={`group rounded-[18px] border p-4 transition-all duration-200
-                    hover:shadow-lg hover:-translate-y-0.5 animate-float-in ${t.border} ${t.inputBg} delay-${Math.min(i, 6)}`}
-                  style={{ borderColor: `${accent}18` }}>
+                  className={`glass-subtle group rounded-[20px] p-4 transition-all duration-200
+                    hover:-translate-y-0.5 animate-float-in delay-${Math.min(i, 6)}`}
+                  style={{ ['--hover-shadow' as any]: `0 8px 30px rgba(0,0,0,0.4)` }}>
 
                   {/* Header row */}
                   <div className="flex items-start justify-between mb-4">
                     {/* Icon circle */}
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[14px] text-xl shrink-0"
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[15px] text-[22px] shrink-0"
                       style={{
-                        background: `linear-gradient(145deg, ${accent}25 0%, ${accent}15 100%)`,
-                        boxShadow: `inset 0 1px 0 ${accent}30`,
+                        background: `linear-gradient(145deg, ${accent}30 0%, ${accent}18 100%)`,
+                        boxShadow: `inset 0 1.5px 0 ${accent}40, inset 0 -1px 0 rgba(0,0,0,0.15)`,
+                        border: `1px solid ${accent}25`,
                       }}>
                       {device.icon ?? deviceTypeIcon(device.type)}
                     </div>
 
                     {/* Status pill */}
                     {st && (
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        st.online ? 'text-[#30D158]' : 'text-[#FF3B30]'
-                      }`} style={{ backgroundColor: st.online ? '#30D15820' : '#FF3B3020' }}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${st.online ? 'bg-[#30D158]' : 'bg-[#FF3B30]'}`}
-                          style={st.online ? { animation: 'statusPulse 2s ease-in-out infinite' } : {}} />
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{
+                          color: st.online ? '#30D158' : '#FF453A',
+                          background: st.online ? 'rgba(48,209,88,0.14)' : 'rgba(255,69,58,0.14)',
+                          border: `1px solid ${st.online ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                        }}>
+                        <span className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: st.online ? '#30D158' : '#FF453A',
+                            animation: st.online ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
                         {st.online ? (st.latencyMs != null ? `${st.latencyMs}ms` : 'online') : 'offline'}
                       </span>
                     )}
@@ -2056,8 +2069,8 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
 
                   {/* Name + type */}
                   <div className="mb-3">
-                    <p className={`text-[14px] font-semibold leading-snug ${t.text}`}>{device.name}</p>
-                    <p className={`text-[12px] ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+                    <p className="text-[14px] font-semibold leading-snug text-white/90">{device.name}</p>
+                    <p className="text-[12px] text-white/40 mt-0.5">{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
                   </div>
 
                   {/* Action feedback */}
@@ -2549,134 +2562,135 @@ function Dashboard({ user, setup, onSignOut }: {
     if (r.ok) setWidgets((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const ALL_NAV = [...visibleNav, { key: 'settings' as Tab, label: 'Einstellungen', icon: <IcGear /> }];
+
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${t.page} p-3 md:p-4 animate-fade-in`}
-      style={{ '--accent-ring': `${accent}45`, '--accent-color': accent } as React.CSSProperties}>
-      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] gap-3 md:gap-4">
+    <div className="min-h-screen flex animate-fade-in"
+      style={{
+        background: 'radial-gradient(ellipse 160% 100% at 50% -20%, #0d0d1a 0%, #000000 50%)',
+        '--accent-ring': `${accent}45`,
+        '--accent-color': accent,
+      } as React.CSSProperties}>
 
-        {/* ── Sidebar ────────────────────────────────────── */}
-        <aside className={`flex w-[220px] shrink-0 flex-col rounded-[22px] border backdrop-blur-2xl
-          transition-all duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 rgba(255,255,255,0.06)`, borderColor: `${accent}1A` }}>
+      {/* Ambient accent glow top-left */}
+      <div style={{
+        position: 'fixed', top: '-5%', left: '-5%', width: '40%', height: '40%',
+        pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at top left, ${accent}15 0%, transparent 60%)`,
+        filter: 'blur(40px)',
+      }} />
 
-          {/* Logo + name */}
-          <div className={`border-b px-4 pt-5 pb-4 ${t.divider}`}>
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-[11px] shrink-0"
-                style={{
-                  background: `linear-gradient(145deg, ${accent}EE, ${accent}AA)`,
-                  boxShadow: `0 3px 10px ${accent}50`,
+      {/* ── Sidebar — Apple TV style ─────────────────── */}
+      <aside className="glass-dark flex w-[232px] shrink-0 flex-col rounded-[24px] m-3 relative z-10 animate-slide-left">
+
+        {/* App name */}
+        <div className="px-5 pt-6 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[11px] shrink-0"
+              style={{
+                background: `linear-gradient(150deg, ${accent} 0%, ${accent}BB 100%)`,
+                boxShadow: `0 4px 12px ${accent}55, inset 0 1px 0 rgba(255,255,255,0.3)`,
+              }}>
+              <img src="/logo.svg" alt="Logo" className="h-[20px] w-[20px]" />
+            </div>
+            <span className="text-[15px] font-semibold tracking-[-0.2px] text-white">{setup.dashboardName}</span>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex flex-1 flex-col gap-[2px] px-3 pb-2">
+          {ALL_NAV.map((item, i) => {
+            const active = tab === item.key;
+            return (
+              <button key={item.key} onClick={() => goTab(item.key)}
+                className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-[10px] text-left text-[14px] font-medium
+                  transition-all duration-200 animate-slide-left delay-${i}`}
+                style={active ? {
+                  color: accent,
+                  background: `${accent}18`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 4px rgba(0,0,0,0.2)`,
+                } : {
+                  color: 'rgba(255,255,255,0.55)',
                 }}>
-                <img src="/logo.svg" alt="Logo" className="h-5 w-5" />
-              </div>
-              <span className={`text-[14px] font-semibold tracking-[-0.1px] ${t.text}`}>{setup.dashboardName}</span>
-            </div>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex flex-1 flex-col gap-0.5 p-2">
-            {visibleNav.map((item, i) => {
-              const active = tab === item.key;
-              return (
-                <button key={item.key} onClick={() => goTab(item.key)}
-                  className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-[9px] text-left text-[13.5px] font-medium
-                    transition-all duration-150 animate-slide-left delay-${i + 1}`}
-                  style={active ? {
-                    backgroundColor: accent,
-                    color: 'white',
-                    boxShadow: `0 3px 10px ${accent}50`,
-                  } : { color: 'var(--t-muted)' }}>
-                  <span className={`flex-shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`}>
-                    {item.icon}
-                  </span>
-                  <span className={active ? 'text-white' : t.text}>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Settings nav item */}
-          <div className={`border-t px-2 pt-1.5 pb-1.5 ${t.divider}`}>
-            <button onClick={() => goTab('settings')}
-              className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-[9px] text-left text-[13.5px] font-medium
-                transition-all duration-150`}
-              style={tab === 'settings' ? {
-                backgroundColor: accent, color: 'white', boxShadow: `0 3px 10px ${accent}50`,
-              } : {}}>
-              <span className={`flex-shrink-0 transition-opacity ${tab === 'settings' ? 'opacity-100' : 'opacity-55'}`}>
-                <IcGear />
-              </span>
-              <span className={tab === 'settings' ? 'text-white' : t.text}>Einstellungen</span>
-            </button>
-          </div>
-
-          {/* User */}
-          <div className={`border-t p-2 ${t.divider}`}>
-            <div className="relative">
-              <button onClick={() => setProfileOpen((v) => !v)}
-                className={`flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-left transition-all duration-150 ${t.navHover}`}>
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
-                  style={{
-                    background: `linear-gradient(135deg, ${accent} 0%, ${accent}CC 100%)`,
-                    boxShadow: `0 2px 6px ${accent}44`,
-                  }}>
-                  {user.email[0].toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <p className={`truncate text-[12px] font-medium ${t.text}`}>{user.email}</p>
-                  <p className={`text-[11px] capitalize ${t.muted}`}>{user.role}</p>
-                </div>
+                <span className="flex-shrink-0" style={{ color: active ? accent : 'rgba(255,255,255,0.45)' }}>
+                  {item.icon}
+                </span>
+                <span style={{ color: active ? accent : 'rgba(255,255,255,0.8)' }}>{item.label}</span>
+                {active && (
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
+                )}
               </button>
-              {profileOpen && (
-                <div className={`absolute bottom-full left-0 mb-1.5 w-full rounded-[14px] border p-1.5
-                  ${t.card} ${t.border} animate-spring-in material-thick`}
-                  style={{ boxShadow: t.shadowLg }}>
-                  <button onClick={signOut}
-                    className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] font-medium text-[#FF3B30] transition-all hover:bg-[#FF3B30]/10">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25z" clipRule="evenodd"/>
-                      <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-1.16a.75.75 0 1 1 1.104-1.02l2.5 2.75a.75.75 0 0 1 0 1.02l-2.5 2.75a.75.75 0 1 1-1.104-1.02l1.048-1.16H6.75A.75.75 0 0 1 6 10z" clipRule="evenodd"/>
-                    </svg>
-                    Abmelden
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </aside>
+            );
+          })}
+        </nav>
 
-        {/* ── Content ────────────────────────────────────── */}
-        <main className={`min-w-0 flex-1 rounded-[22px] border backdrop-blur-xl p-5 md:p-6
-          transition-all duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 rgba(255,255,255,0.04)`, borderColor: `${accent}18` }}>
+        {/* User */}
+        <div className="px-3 pb-4 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="relative">
+            <button onClick={() => setProfileOpen((v) => !v)}
+              className="flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left transition-all duration-150"
+              style={{ ':hover': { background: 'rgba(255,255,255,0.06)' } } as any}>
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${accent} 0%, ${accent}CC 100%)`,
+                  boxShadow: `0 2px 8px ${accent}50`,
+                }}>
+                {user.email[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-white/80">{user.email}</p>
+                <p className="text-[11px] capitalize text-white/40">{user.role}</p>
+              </div>
+            </button>
+            {profileOpen && (
+              <div className="glass-card absolute bottom-full left-0 mb-2 w-full rounded-[16px] p-1.5 animate-spring-in">
+                <button onClick={signOut}
+                  className="flex w-full items-center gap-2.5 rounded-[11px] px-3 py-2.5 text-left text-[13px] font-medium text-[#FF453A] transition-all hover:bg-[#FF453A]/12">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25z" clipRule="evenodd"/>
+                    <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-1.16a.75.75 0 1 1 1.104-1.02l2.5 2.75a.75.75 0 0 1 0 1.02l-2.5 2.75a.75.75 0 1 1-1.104-1.02l1.048-1.16H6.75A.75.75 0 0 1 6 10z" clipRule="evenodd"/>
+                  </svg>
+                  Abmelden
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Content ──────────────────────────────────── */}
+      <main className="glass-dark min-w-0 flex-1 rounded-[24px] m-3 ml-0 p-6 md:p-7 relative z-10 overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 1.5rem)' }}>
 
           {tab === 'home' && (
             <div className="animate-slide-right space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className={`text-[22px] font-semibold tracking-[-0.4px] ${t.text}`}>Übersicht</h1>
-                  <p className={`text-[14px] ${t.muted}`}>Guten Tag, {user.email.split('@')[0]}</p>
+                  <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Übersicht</h1>
+                  <p className="text-[14px] text-white/45">Guten Tag, {user.email.split('@')[0]}</p>
                 </div>
-                <Btn accent={accent} size="sm" variant="secondary" onClick={() => setShowAddWidget(true)}>+ Widget</Btn>
+                <button onClick={() => setShowAddWidget(true)}
+                  className="glass-pill rounded-[12px] px-4 py-2 text-[13px] font-medium text-white/80 transition-all hover:text-white active:scale-[0.97]">
+                  + Widget
+                </button>
               </div>
 
               {showAddWidget && (
-                <div className={`rounded-[18px] border p-5 ${t.border} ${t.inputBg}`}
+                <div className="glass-subtle rounded-[20px] p-5"
                   style={{ borderColor: `${accent}20` }}>
-                  <p className={`mb-4 font-semibold ${t.text}`}>Widget hinzufügen</p>
+                  <p className="mb-4 font-semibold text-white/80">Widget hinzufügen</p>
                   <WidgetForm onSave={addWidget} onCancel={() => setShowAddWidget(false)} devices={devices} t={t} accent={accent} />
                 </div>
               )}
 
               {widgets.length === 0 && !showAddWidget && (
-                <div className={`rounded-[18px] border border-dashed p-16 text-center ${t.border}`}
-                  style={{ borderColor: `${accent}25` }}>
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px]"
-                    style={{ backgroundColor: `${accent}15` }}>
+                <div className="glass-subtle rounded-[20px] p-16 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] text-white/30"
+                    style={{ background: `${accent}15` }}>
                     <IcGrid size={24} />
                   </div>
-                  <p className={`font-semibold ${t.text}`}>Keine Widgets</p>
-                  <p className={`mt-1 text-[13px] ${t.muted}`}>Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
+                  <p className="font-semibold text-white/70">Keine Widgets</p>
+                  <p className="mt-1 text-[13px] text-white/35">Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
                 </div>
               )}
 
@@ -2720,7 +2734,6 @@ function Dashboard({ user, setup, onSignOut }: {
             <AdminTab t={t} accent={accent} />
           )}
         </main>
-      </div>
     </div>
   );
 }
