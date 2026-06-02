@@ -6,6 +6,16 @@ import express from 'express';
 import { startMdnsListener, runDiscovery, getLastResults } from './discovery.js';
 import { executeDeviceAction } from './proxy.js';
 import type { DeviceConfig } from './proxy.js';
+import { logEvent, getRecent, type AuditKind } from './audit.js';
+
+// Best-effort human-readable target for the audit log (what the Pi will contact)
+const describeTarget = (cfg: DeviceConfig): string => {
+  if (cfg.type === 'wol') return `mac ${cfg.mac}`;
+  if (cfg.type === 'tailscale') return 'tailscale-api';
+  const ip = (cfg as { ip?: string }).ip;
+  const p = (cfg as { port?: number }).port;
+  return ip ? (p ? `${ip}:${p}` : ip) : cfg.type;
+};
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -56,6 +66,7 @@ app.use((req, res, next) => {
   if (req.path === '/health') return next();
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${agentSecret}`) {
+    logEvent({ kind: 'auth_fail', ok: false, action: `${req.method} ${req.path}`, message: 'Bad or missing bearer token' });
     return res.status(401).json({ error: 'Unauthorized' });
   }
   return next();
@@ -83,7 +94,7 @@ app.post('/devices/config', (req, res) => {
   if (!config.id || !config.type) return res.status(400).json({ error: 'id and type required' });
   deviceConfigs.set(config.id, config);
   saveConfigs();
-  console.log(`Device config stored: ${config.id} (${config.type})`);
+  logEvent({ kind: 'config_create', ok: true, deviceId: config.id, deviceType: config.type, target: describeTarget(config) });
   return res.json({ ok: true });
 });
 
@@ -99,13 +110,16 @@ app.put('/devices/config/:id', (req, res) => {
   if (!config.type) return res.status(400).json({ error: 'type required' });
   deviceConfigs.set(req.params.id, config);
   saveConfigs();
+  logEvent({ kind: 'config_update', ok: true, deviceId: config.id, deviceType: config.type, target: describeTarget(config) });
   return res.json({ ok: true });
 });
 
 app.delete('/devices/config/:id', (req, res) => {
+  const existed = deviceConfigs.get(req.params.id);
   deviceConfigs.delete(req.params.id);
   monitorStatuses.delete(req.params.id);
   saveConfigs();
+  logEvent({ kind: 'config_delete', ok: true, deviceId: req.params.id, deviceType: existed?.type });
   return res.json({ ok: true });
 });
 
@@ -160,10 +174,11 @@ app.get('/devices/monitor', (_req, res) => {
 // or  { config, action, ...params } (legacy/direct mode, kept for backward compat)
 
 app.post('/proxy', async (req, res) => {
-  const { deviceId, config: inlineConfig, action, ...params } = req.body as {
+  const { deviceId, config: inlineConfig, action, actor, ...params } = req.body as {
     deviceId?: string;
     config?: DeviceConfig;
     action: string;
+    actor?: string;       // user identity forwarded by the dashboard, for the audit trail
     [key: string]: unknown;
   };
 
@@ -173,6 +188,7 @@ app.post('/proxy', async (req, res) => {
   if (deviceId) {
     const stored = deviceConfigs.get(deviceId);
     if (!stored) {
+      logEvent({ kind: 'action', ok: false, actor, deviceId, action, message: 'No config found for device' });
       return res.status(404).json({
         error: `No config found for device "${deviceId}". Re-add the device in Settings to re-register its config.`,
       });
@@ -185,14 +201,34 @@ app.post('/proxy', async (req, res) => {
     return res.status(400).json({ error: 'deviceId or config is required' });
   }
 
+  const t0 = Date.now();
   try {
     const result = await executeDeviceAction(config, action, params);
+    logEvent({
+      kind: 'action', ok: true, actor, deviceId,
+      deviceType: config.type, action, target: describeTarget(config),
+      latencyMs: Date.now() - t0,
+    });
     return res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Device action failed';
-    console.error('proxy error', { deviceId, type: config.type, action, msg });
+    logEvent({
+      kind: 'action', ok: false, actor, deviceId,
+      deviceType: config.type, action, target: describeTarget(config),
+      latencyMs: Date.now() - t0, message: msg,
+    });
     return res.status(502).json({ error: msg });
   }
+});
+
+// ── Audit log ──────────────────────────────────────────────────────────────
+// Admins read this via the dashboard (proxied over Tailscale). It never leaves
+// the Tailscale tunnel — the detailed internal trail stays on the Pi.
+
+app.get('/audit', (req, res) => {
+  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
+  const kind = typeof req.query.kind === 'string' ? req.query.kind as AuditKind : undefined;
+  res.json({ entries: getRecent(limit, kind) });
 });
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -200,7 +236,7 @@ app.post('/proxy', async (req, res) => {
 app.post('/discover', async (_req, res) => {
   res.json({ ok: true, message: 'Discovery started' });
   void runDiscovery(process.env.LOCAL_SUBNET).then((results) => {
-    console.log(`Discovery complete: ${results.length} devices found`);
+    logEvent({ kind: 'discovery', ok: true, message: `${results.length} devices found` });
   });
 });
 
@@ -222,7 +258,7 @@ app.post('/agents/register', (req, res) => {
     lastSeen: Date.now(),
   };
   hostAgents.set(id, agent);
-  console.log(`Host agent registered: ${hostname} (${ip})`);
+  logEvent({ kind: 'agent_register', ok: true, target: `${hostname} (${ip})`, message: agent.services.length ? `services: ${agent.services.join(', ')}` : undefined });
   return res.json({ ok: true, id });
 });
 
@@ -232,6 +268,10 @@ app.post('/agents/heartbeat', (req, res) => {
   const id = hostname.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const agent = hostAgents.get(id);
   if (!agent) return res.status(404).json({ error: 'Agent not registered. Call /agents/register first.' });
+  // Log only when the IP actually changes — heartbeats are too frequent to log every time
+  if (ip && ip !== agent.ip) {
+    logEvent({ kind: 'agent_ip_change', ok: true, target: hostname, message: `${agent.ip} → ${ip}` });
+  }
   agent.lastSeen = Date.now();
   if (ip) agent.ip = ip;
   if (tailscaleIp !== undefined) agent.tailscaleIp = tailscaleIp;

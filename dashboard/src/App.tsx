@@ -52,6 +52,20 @@ type Device = {
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
 
+type AuditEntry = {
+  ts: number;
+  kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'auth_fail';
+  ok: boolean;
+  actor?: string;
+  deviceId?: string;
+  deviceType?: string;
+  action?: string;
+  target?: string;
+  statusCode?: number;
+  latencyMs?: number;
+  message?: string;
+};
+
 type WidgetLayout = { col: number; row: number; w: number; h: number };
 type WidgetConfig =
   | { type: 'clock';              format?: '12h' | '24h'; showSeconds?: boolean; showDate?: boolean }
@@ -1884,8 +1898,25 @@ function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) 
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [userPerms, setUserPerms] = useState<PermissionFlag[]>([]);
   const [permsLoading, setPermsLoading] = useState(false);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [auditConfigured, setAuditConfigured] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
 
-  useEffect(() => { void loadUsers(); }, []);
+  useEffect(() => { void loadUsers(); void loadAudit(); }, []);
+
+  const loadAudit = async () => {
+    setAuditLoading(true);
+    try {
+      const r = await fetch('/api/admin/audit?limit=100', { credentials: 'include' });
+      if (r.ok) {
+        const d = await r.json() as { entries: AuditEntry[]; configured?: boolean };
+        setAudit(d.entries ?? []);
+        setAuditConfigured(d.configured !== false);
+      }
+    } finally {
+      setAuditLoading(false);
+    }
+  };
 
   const loadUsers = async () => {
     const r = await fetch('/api/admin/users', { credentials: 'include' });
@@ -2011,9 +2042,53 @@ function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) 
           )}
         </div>
       </section>
+
+      {/* Activity log (from Pi Agent) */}
+      <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className={`font-semibold ${t.text}`}>Aktivitätsprotokoll</h2>
+            <p className={`mt-0.5 text-sm ${t.muted}`}>Interne Vorgänge auf dem Pi Agent (Geräteaktionen, Konfig-Änderungen, Hosts).</p>
+          </div>
+          <Btn accent={accent} variant="secondary" size="sm" onClick={loadAudit} loading={auditLoading}>↻ Aktualisieren</Btn>
+        </div>
+
+        {!auditConfigured ? (
+          <p className={`text-sm ${t.muted}`}>Kein Pi Agent konfiguriert — im lokalen Modus wird kein internes Protokoll geführt.</p>
+        ) : audit.length === 0 ? (
+          <p className={`text-sm ${t.muted}`}>Noch keine Einträge.</p>
+        ) : (
+          <div className="space-y-1 max-h-96 overflow-y-auto">
+            {audit.map((e, i) => (
+              <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs ${t.navHover}`}>
+                <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${e.ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString('de-DE')}</span>
+                <span className="flex-shrink-0 rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${accent}15`, color: accent }}>{auditKindLabel(e.kind)}</span>
+                <span className={`min-w-0 flex-1 truncate ${t.text}`}>
+                  {[e.action, e.deviceType, e.target].filter(Boolean).join(' · ')}
+                  {e.message ? ` — ${e.message}` : ''}
+                </span>
+                {e.actor && <span className={`flex-shrink-0 ${t.muted}`}>{e.actor.split('@')[0]}</span>}
+                {typeof e.latencyMs === 'number' && <span className={`flex-shrink-0 font-mono ${t.muted}`}>{e.latencyMs}ms</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
+
+const auditKindLabel = (k: AuditEntry['kind']): string => ({
+  action: 'Aktion',
+  config_create: 'Gerät +',
+  config_update: 'Gerät ✎',
+  config_delete: 'Gerät ×',
+  agent_register: 'Host',
+  agent_ip_change: 'IP-Wechsel',
+  discovery: 'Scan',
+  auth_fail: 'Auth ✗',
+}[k] ?? k);
 
 // ── Dashboard shell ───────────────────────────────────────────────────────────
 

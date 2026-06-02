@@ -10,3 +10,4 @@ services:
     network_mode: host   # needs host network for ARP table access + mDNS
     volumes:
       - /proc/net/arp:/proc/net/arp:ro  # read-only ARP table access
+      - ./data:/app/data                # device configs (secrets) + audit log — persisted, back this up
