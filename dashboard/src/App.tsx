@@ -52,6 +52,15 @@ type Device = {
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
 
+type DiscoveredDevice = {
+  ip: string;
+  mac?: string;
+  hostname?: string;
+  type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'http' | 'unknown';
+  via: 'arp' | 'mdns';
+  discoveredAt: number;
+};
+
 type AuditEntry = {
   ts: number;
   kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'auth_fail';
@@ -1591,6 +1600,10 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, devices, setD
   const [editDevice, setEditDevice] = useState<Device | null>(null);
   const [showWidgetForm, setShowWidgetForm] = useState(false);
   const [devStatus, setDevStatus] = useState('');
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
+  const [discoverConfigured, setDiscoverConfigured] = useState(true);
+  const [prefill, setPrefill] = useState<Partial<Device> | null>(null);
 
   const saveDevice = async (data: Omit<Device, 'id'>) => {
     if (editDevice) {
@@ -1619,6 +1632,44 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, devices, setD
   const deleteDevice = async (id: string) => {
     const r = await fetch(`/api/devices/${id}`, { method: 'DELETE', credentials: 'include' });
     if (r.ok) setDevices(devices.filter((d) => d.id !== id));
+  };
+
+  // Ask the Pi Agent to scan the LAN, then load the results.
+  const runDiscovery = async () => {
+    setDiscovering(true);
+    setDevStatus('');
+    try {
+      const start = await fetch('/api/pi-agent/discover', { method: 'POST', credentials: 'include' });
+      if (start.status === 400) { setDiscoverConfigured(false); setDevStatus('✗ Kein Pi Agent konfiguriert'); return; }
+      // The scan runs in the background on the Pi — give it a few seconds, then pull results
+      await new Promise((r) => setTimeout(r, 6000));
+      await loadDiscovered();
+    } catch {
+      setDevStatus('✗ Pi Agent nicht erreichbar');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const loadDiscovered = async () => {
+    const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json() as { devices: DiscoveredDevice[]; configured: boolean };
+    setDiscoverConfigured(d.configured);
+    // Hide devices already configured (match by — best effort — type+hostname)
+    setDiscovered(d.devices ?? []);
+  };
+
+  // Pre-fill the device form from a discovered entry
+  const addDiscovered = (dd: DiscoveredDevice) => {
+    const type = dd.type === 'unknown' ? 'http' : dd.type;
+    setPrefill({
+      name: dd.hostname || `${type} ${dd.ip}`,
+      type,
+      config: { type, ip: dd.ip } as DeviceConfig,
+    });
+    setShowDeviceForm(true);
+    setEditDevice(null);
   };
 
   const saveWidget = async (data: Omit<Widget, 'id' | 'userId'>) => {
@@ -1713,19 +1764,48 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, devices, setD
           <div className="flex items-center justify-between">
             <h2 className={`font-semibold ${t.text}`}>Geräte verwalten</h2>
             {!showDeviceForm && !editDevice && (
-              <Btn accent={accent} size="sm" onClick={() => setShowDeviceForm(true)}>+ Gerät</Btn>
+              <div className="flex gap-2">
+                <Btn accent={accent} variant="secondary" size="sm" onClick={runDiscovery} loading={discovering}>
+                  🔍 Geräte suchen
+                </Btn>
+                <Btn accent={accent} size="sm" onClick={() => { setPrefill(null); setShowDeviceForm(true); }}>+ Gerät</Btn>
+              </div>
             )}
           </div>
 
           {devStatus && <StatusMsg msg={devStatus} t={t} />}
 
+          {/* Discovery results */}
+          {discovered.length > 0 && !showDeviceForm && !editDevice && (
+            <div className={`rounded-xl border p-3 space-y-2 ${t.border}`} style={{ borderColor: `${accent}25`, backgroundColor: `${accent}06` }}>
+              <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} Gerät(e) im Netzwerk gefunden</p>
+              {discovered.map((dd, i) => (
+                <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
+                    <div className="min-w-0">
+                      <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
+                      <p className={`text-xs ${t.muted}`}>
+                        {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unbekannt' : dd.type} · {dd.via}
+                      </p>
+                    </div>
+                  </div>
+                  <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Hinzufügen</Btn>
+                </div>
+              ))}
+            </div>
+          )}
+          {!discoverConfigured && (
+            <p className={`text-xs ${t.muted}`}>Geräte-Suche benötigt einen konfigurierten Pi Agent (PI_AGENT_URL).</p>
+          )}
+
           {(showDeviceForm || editDevice) && (
             <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
               <p className={`mb-4 text-sm font-medium ${t.text}`}>{editDevice ? 'Gerät bearbeiten' : 'Neues Gerät'}</p>
               <DeviceForm
-                initial={editDevice ?? undefined}
-                onSave={saveDevice}
-                onCancel={() => { setShowDeviceForm(false); setEditDevice(null); setDevStatus(''); }}
+                initial={editDevice ?? prefill ?? undefined}
+                onSave={async (data) => { await saveDevice(data); setPrefill(null); }}
+                onCancel={() => { setShowDeviceForm(false); setEditDevice(null); setPrefill(null); setDevStatus(''); }}
                 t={t} accent={accent}
               />
             </div>

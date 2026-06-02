@@ -190,10 +190,23 @@ async function buildState(): Promise<AgentState> {
   return { hostname: AGENT_HOSTNAME, ip: primaryIp, tailscaleIp, services };
 }
 
+// Pi Agent stores `services` as a string[], so flatten the detected ServiceInfo.
+function servicesList(info: ServiceInfo): string[] {
+  const out: string[] = [];
+  if (info.hasDocker) out.push(info.dockerVersion ? `docker:${info.dockerVersion}` : 'docker');
+  if (info.hasProxmox) out.push(info.proxmoxVersion ? `proxmox:${info.proxmoxVersion}` : 'proxmox');
+  return out;
+}
+
 async function register(): Promise<void> {
   const state = await buildState();
   lastState = state;
-  await agentPost('/agents/register', state);
+  await agentPost('/agents/register', {
+    hostname: state.hostname,
+    ip: state.ip,
+    tailscaleIp: state.tailscaleIp,
+    services: servicesList(state.services),
+  });
   console.log(`[host-agent] Registered as "${state.hostname}" (${state.ip}${state.tailscaleIp ? `, ts: ${state.tailscaleIp}` : ''})`);
   if (state.services.hasDocker) console.log(`[host-agent]   Docker${state.services.dockerVersion ? ` v${state.services.dockerVersion}` : ''}`);
   if (state.services.hasProxmox) console.log(`[host-agent]   Proxmox${state.services.proxmoxVersion ? ` v${state.services.proxmoxVersion}` : ''}`);
