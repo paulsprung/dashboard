@@ -177,6 +177,21 @@ function SuccessCheck({ color }: { color: string }) {
   );
 }
 
+function FaceIDIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 8V6a2 2 0 0 1 2-2h2" />
+      <path d="M2 16v2a2 2 0 0 0 2 2h2" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+      <path d="M16 20h2a2 2 0 0 0 2-2v-2" />
+      <path d="M9 10h.01" />
+      <path d="M15 10h.01" />
+      <path d="M9.5 15a3.5 3.5 0 0 0 5 0" />
+    </svg>
+  );
+}
+
 function Btn({
   children, onClick, loading = false, disabled = false,
   variant = 'primary', accent, className = '', size = 'md',
@@ -1309,150 +1324,169 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
     setTimeout(onDone, 1800);
   });
 
-  const steps = ['E-Mail', 'Passkey', 'Backup', 'Design'];
+  const stepLabels = ['E-Mail', 'Passkey', 'Backup', 'Design'];
 
   return (
-    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 animate-fade-in`}>
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center animate-slide-up">
-          <img src="/logo.svg" alt="Logo" className="mx-auto mb-4 h-12 w-12 rounded-2xl" style={{ boxShadow: `0 4px 16px ${accent}44` }} />
-          <h1 className={`text-2xl font-semibold tracking-tight ${t.text}`}>Dashboard einrichten</h1>
-          <p className={`mt-1 text-sm ${t.muted}`}>Schritt {Math.min(step, 4)} von 4</p>
+    <div
+      className={`relative min-h-screen ${t.page} flex items-center justify-center p-6 overflow-hidden`}>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-1/2 -top-60 h-[600px] w-[900px] -translate-x-1/2 rounded-full blur-3xl"
+          style={{ background: accent, opacity: 0.12 }} />
+      </div>
+
+      <div className="relative w-full max-w-md animate-fade-in">
+        {/* Logo + header */}
+        <div className="mb-8 text-center animate-slide-up">
+          <div className="mx-auto mb-5 h-16 w-16 overflow-hidden rounded-[22px]"
+            style={{ boxShadow: `0 8px 40px ${accent}60, 0 2px 8px rgba(0,0,0,0.5)` }}>
+            <img src="/logo.svg" alt="Logo" className="h-full w-full" />
+          </div>
+          <h1 className={`text-[28px] font-semibold tracking-tight ${t.text}`}>Dashboard einrichten</h1>
+          <p className={`mt-1.5 text-sm ${t.muted}`}>{stepLabels[Math.min(step, 4) - 1] ?? ''}</p>
         </div>
 
-        <div className={`h-1 w-full rounded-full overflow-hidden ${t.inputBg}`}>
-          <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${(Math.min(step, 4) / 4) * 100}%`, backgroundColor: accent }} />
-        </div>
-
-        <div className="flex justify-between">
-          {steps.map((label, i) => {
+        {/* Step dots */}
+        <div className="mb-6 flex items-center justify-center gap-2">
+          {stepLabels.map((_, i) => {
             const s = i + 1;
             const active = step === s;
             const done_ = step > s;
             return (
-              <div key={s} className="flex flex-col items-center gap-1">
-                <div className={`h-6 w-6 rounded-full text-xs flex items-center justify-center font-medium transition-all ${
-                  done_ ? 'text-white' : active ? 'text-white' : `${t.muted} ${t.inputBg}`
-                }`} style={done_ || active ? { backgroundColor: accent } : {}}>
-                  {done_ ? '✓' : s}
-                </div>
-                <span className={`text-[10px] ${active ? t.text : t.muted}`}>{label}</span>
-              </div>
+              <div key={s}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: active ? 24 : 8,
+                  height: 8,
+                  backgroundColor: done_ || active ? accent : `${accent}30`,
+                }} />
             );
           })}
         </div>
 
-        <div key={animKey} className="animate-slide-up">
-          <Card t={t} accent={accent} className="p-7">
-            {done ? (
-              <div className="flex flex-col items-center gap-4 py-4">
-                <SuccessCheck color={accent} />
-                <div className="text-center">
-                  <p className={`font-semibold ${t.text}`}>Einrichtung abgeschlossen</p>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Du wirst weitergeleitet…</p>
-                </div>
+        {/* Card */}
+        <div key={animKey}
+          className={`rounded-3xl border backdrop-blur-2xl p-8 animate-slide-up ${t.card}`}
+          style={{
+            borderColor: `${accent}20`,
+            boxShadow: `0 32px 80px rgba(0,0,0,0.45), inset 0 1px 0 ${accent}25`,
+          }}>
+          {done ? (
+            <div className="flex flex-col items-center gap-5 py-4">
+              <SuccessCheck color={accent} />
+              <div className="text-center">
+                <p className={`font-semibold ${t.text}`}>Einrichtung abgeschlossen</p>
+                <p className={`mt-1.5 text-sm ${t.muted}`}>Du wirst weitergeleitet…</p>
               </div>
-            ) : step === 1 ? (
-              <div className="space-y-5">
+            </div>
+          ) : step === 1 ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className={`text-lg font-semibold ${t.text}`}>Root-Konto anlegen</h2>
+                <p className={`mt-1 text-sm ${t.muted}`}>Deine E-Mail-Adresse wird als Administrator-Konto verwendet.</p>
+              </div>
+              <input
+                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="du@beispiel.de"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && startSetup()}
+                className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
+                  ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
+                style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+              />
+              <StatusMsg msg={status} t={t} />
+              <Btn accent={accent} className="w-full" onClick={startSetup} loading={loading}
+                disabled={!email.includes('@')}>Weiter</Btn>
+            </div>
+          ) : step === 2 ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
+                <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel. Keine Passwörter nötig.</p>
+              </div>
+              <button onClick={() => go(1)}
+                className={`flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
+                <span className="text-base">📧</span>
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Root-Konto anlegen</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deine E-Mail-Adresse ein. Sie wird als Administrator-Konto verwendet.</p>
+                  <p className={`text-sm font-medium ${t.text}`}>{email}</p>
+                  <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
                 </div>
-                <Input label="E-Mail" value={email} onChange={setEmail}
-                  placeholder="du@beispiel.de" type="email" t={t} accent={accent} autoFocus />
-                <StatusMsg msg={status} t={t} />
-                <Btn accent={accent} className="w-full" onClick={startSetup} loading={loading}
-                  disabled={!email.includes('@')}>Weiter</Btn>
+              </button>
+              <StatusMsg msg={status} t={t} />
+              <button
+                onClick={registerPasskey}
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
+                style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
+                {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Passkey erstellen</>}
+              </button>
+            </div>
+          ) : step === 3 ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
+                <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
               </div>
-            ) : step === 2 ? (
-              <div className="space-y-5">
-                <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel. Keine Passwörter nötig.</p>
-                </div>
-                <button onClick={() => go(1)}
-                  className={`flex w-full items-center gap-3 rounded-xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
-                  <span className="text-base">📧</span>
-                  <div>
-                    <p className={`text-sm font-medium ${t.text}`}>{email}</p>
-                    <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
+              {backupLoading ? (
+                <div className="flex items-center justify-center py-8"><Spinner size={24} color={accent} /></div>
+              ) : backupPassword ? (
+                <div className="space-y-4">
+                  <div className={`rounded-2xl border p-5 space-y-2 ${t.inputBg} ${t.border}`}>
+                    <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
+                    <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed"
+                      style={{ color: accent }}>{backupPassword}</p>
                   </div>
-                </button>
-                <StatusMsg msg={status} t={t} />
-                <Btn accent={accent} className="w-full" onClick={registerPasskey} loading={loading}>
-                  Passkey erstellen
-                </Btn>
+                  <div className="rounded-2xl p-3.5 text-xs space-y-1" style={{ backgroundColor: `${accent}12` }}>
+                    <p style={{ color: accent }} className="font-medium mb-1">So aufbewahren:</p>
+                    <p className={t.muted}>• Passwortmanager (empfohlen)</p>
+                    <p className={t.muted}>• Sicher ausgedruckt und eingeschlossen</p>
+                    <p className={t.muted}>• Verschlüsseltes Notizdokument</p>
+                  </div>
+                  <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
+                    Ich habe den Code gesichert
+                  </Btn>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <StatusMsg msg={status} t={t} />
+                  <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
+                    Erneut versuchen
+                  </Btn>
+                </div>
+              )}
+              {backupPassword && <StatusMsg msg={status} t={t} />}
+            </div>
+          ) : step === 4 ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className={`text-lg font-semibold ${t.text}`}>Dashboard anpassen</h2>
+                <p className={`mt-1 text-sm ${t.muted}`}>Gib deinem Dashboard einen Namen und wähle das Erscheinungsbild.</p>
               </div>
-            ) : step === 3 ? (
-              <div className="space-y-5">
-                <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
+              <Input label="Dashboard-Name" value={dashboardName} onChange={setDashboardName}
+                placeholder="Mein Dashboard" t={t} accent={accent} />
+              <div className="space-y-1.5">
+                <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
+                    <button key={m} onClick={() => setTheme(m)}
+                      className={`rounded-2xl border px-3 py-2.5 text-xs font-medium transition-all ${
+                        theme === m ? '' : `${t.border} opacity-40 hover:opacity-70`
+                      }`}
+                      style={theme === m ? { borderColor: accent, color: accent } : {}}>
+                      {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
+                    </button>
+                  ))}
                 </div>
-                {backupLoading ? (
-                  <div className="flex items-center justify-center py-8"><Spinner size={24} color={accent} /></div>
-                ) : backupPassword ? (
-                  <div className="space-y-4">
-                    <div className={`rounded-xl border p-4 space-y-2 ${t.inputBg} ${t.border}`}>
-                      <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
-                      <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed" style={{ color: accent }}>
-                        {backupPassword}
-                      </p>
-                    </div>
-                    <div className={`rounded-xl p-3 text-xs ${t.muted} space-y-1`} style={{ backgroundColor: `${accent}12` }}>
-                      <p style={{ color: accent }} className="font-medium">So aufbewahren:</p>
-                      <p>• Passwortmanager (empfohlen)</p>
-                      <p>• Sicher ausgedruckt und eingeschlossen</p>
-                      <p>• Verschlüsseltes Notizdokument</p>
-                    </div>
-                    <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
-                      Ich habe den Code gesichert
-                    </Btn>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <StatusMsg msg={status} t={t} />
-                    <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
-                      Erneut versuchen
-                    </Btn>
-                  </div>
-                )}
-                {backupPassword && <StatusMsg msg={status} t={t} />}
               </div>
-            ) : step === 4 ? (
-              <div className="space-y-5">
-                <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Dashboard anpassen</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deinem Dashboard einen Namen und wähle das Erscheinungsbild.</p>
-                </div>
-                <Input label="Dashboard-Name" value={dashboardName} onChange={setDashboardName}
-                  placeholder="Mein Dashboard" t={t} accent={accent} />
-                <div className="space-y-1.5">
-                  <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
-                      <button key={m} onClick={() => setTheme(m)}
-                        className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
-                          theme === m ? '' : `${t.border} opacity-40 hover:opacity-70`
-                        }`}
-                        style={theme === m ? { borderColor: accent, color: accent } : {}}>
-                        {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
-                  <ColorPicker value={accent} onChange={setAccent} t={t} />
-                </div>
-                <StatusMsg msg={status} t={t} />
-                <Btn accent={accent} className="w-full" onClick={finish} loading={loading}>
-                  Einrichtung abschließen
-                </Btn>
+              <div className="space-y-1.5">
+                <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
+                <ColorPicker value={accent} onChange={setAccent} t={t} />
               </div>
-            ) : null}
-          </Card>
+              <StatusMsg msg={status} t={t} />
+              <Btn accent={accent} className="w-full" onClick={finish} loading={loading}>
+                Einrichtung abschließen
+              </Btn>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1466,15 +1500,32 @@ function AuthPage({ title, sub, children, accent, t }: {
   accent: string; t: ReturnType<typeof tok>;
 }) {
   return (
-    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 animate-fade-in`}>
-      <div className="w-full max-w-sm space-y-6 animate-slide-up">
-        <div className="text-center">
-          <img src="/logo.svg" alt="Logo" className="mx-auto mb-4 h-11 w-11 rounded-[14px]"
-            style={{ boxShadow: `0 4px 14px ${accent}44` }} />
-          <h1 className={`text-2xl font-semibold tracking-tight ${t.text}`}>{title}</h1>
-          <p className={`mt-1 text-sm ${t.muted}`}>{sub}</p>
+    <div className={`relative min-h-screen ${t.page} flex items-center justify-center p-6 overflow-hidden`}>
+      {/* Ambient glow behind header */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-1/2 -top-60 h-[600px] w-[900px] -translate-x-1/2 rounded-full blur-3xl"
+          style={{ background: accent, opacity: 0.12 }} />
+      </div>
+
+      <div className="relative w-full max-w-[380px] animate-fade-in">
+        {/* Logo + title — outside the card */}
+        <div className="mb-8 text-center animate-slide-up">
+          <div className="mx-auto mb-5 h-16 w-16 overflow-hidden rounded-[22px]"
+            style={{ boxShadow: `0 8px 40px ${accent}60, 0 2px 8px rgba(0,0,0,0.5)` }}>
+            <img src="/logo.svg" alt="" className="h-full w-full" />
+          </div>
+          <h1 className={`text-[28px] font-semibold tracking-tight ${t.text}`}>{title}</h1>
+          <p className={`mt-1.5 text-sm ${t.muted}`}>{sub}</p>
         </div>
-        <Card t={t} accent={accent} className="p-7">{children}</Card>
+
+        {/* Card */}
+        <div className={`rounded-3xl border backdrop-blur-2xl p-8 animate-slide-up ${t.card}`}
+          style={{
+            borderColor: `${accent}20`,
+            boxShadow: `0 32px 80px rgba(0,0,0,0.45), inset 0 1px 0 ${accent}25`,
+          }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -1509,13 +1560,26 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
   return (
     <AuthPage title={setup.dashboardName} sub="Melde dich mit deinem Passkey an" accent={accent} t={t}>
       <div className="space-y-4">
-        <Input label="E-Mail" value={email} onChange={setEmail}
-          placeholder="du@beispiel.de" type="email" t={t} accent={accent} autoFocus />
+        <input
+          type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="E-Mail-Adresse"
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
+          className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
+            ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
+          style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+        />
         <StatusMsg msg={status} t={t} />
-        <Btn accent={accent} className="w-full" onClick={signIn}
-          loading={loading} disabled={!email.includes('@')}>
-          Mit Passkey anmelden
-        </Btn>
+        <button
+          onClick={signIn}
+          disabled={loading || !email.includes('@')}
+          className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
+          style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
+          {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Mit Passkey anmelden</>}
+        </button>
+        <p className={`text-center text-xs ${t.muted} opacity-60`}>
+          Kein Passwort nötig — dein Gerät authentifiziert dich
+        </p>
       </div>
     </AuthPage>
   );
@@ -1555,21 +1619,33 @@ function InvitePage({ setup, inviteToken, initEmail }: {
   return (
     <AuthPage title="Einladung annehmen" sub="Erstelle deinen Passkey für das Dashboard" accent={accent} t={t}>
       {done ? (
-        <div className="flex flex-col items-center gap-4 py-2">
+        <div className="flex flex-col items-center gap-5 py-4">
           <SuccessCheck color={accent} />
           <div className="text-center">
-            <p className={`font-medium ${t.text}`}>Passkey erstellt</p>
-            <p className={`mt-1 text-sm ${t.muted}`}>Du kannst dich jetzt anmelden. Lade die Seite neu.</p>
+            <p className={`font-semibold ${t.text}`}>Passkey erstellt</p>
+            <p className={`mt-1.5 text-sm ${t.muted}`}>Lade die Seite neu, um dich anzumelden.</p>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          <Input label="E-Mail" value={email} onChange={setEmail} t={t} accent={accent} />
+          <input
+            type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="E-Mail-Adresse"
+            className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
+              ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
+            style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+          />
           <StatusMsg msg={status} t={t} />
-          <Btn accent={accent} className="w-full" onClick={register}
-            loading={loading} disabled={!email.includes('@')}>
-            Passkey erstellen
-          </Btn>
+          <button
+            onClick={register}
+            disabled={loading || !email.includes('@')}
+            className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
+            style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
+            {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Passkey erstellen</>}
+          </button>
+          <p className={`text-center text-xs ${t.muted} opacity-60`}>
+            Kein Passwort nötig — dein Gerät authentifiziert dich
+          </p>
         </div>
       )}
     </AuthPage>
