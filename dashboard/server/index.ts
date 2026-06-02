@@ -931,12 +931,13 @@ app.post('/api/devices/:id/action', async (req, res) => {
   const { action } = req.body as { action?: string };
   if (!action) return res.status(400).json({ error: 'action is required' });
 
-  // Zero-knowledge mode: forward to Pi Agent using only the device ID — no config sent over the wire
+  // Zero-knowledge mode: forward to Pi Agent using only the device ID — no config sent over the wire.
+  // `actor` (the user's email) is forwarded so the Pi's audit log records WHO triggered the action.
   if (hasPiAgent()) {
     try {
       const r = await piAgentFetch('/proxy', {
         method: 'POST',
-        body: JSON.stringify({ deviceId: req.params.id, action, ...req.body }),
+        body: JSON.stringify({ ...req.body, deviceId: req.params.id, action, actor: user.email }),
       });
       const data = await r.json();
       return res.status(r.status).json(data);
@@ -1174,6 +1175,27 @@ app.put('/api/admin/users/:userId/permissions', (req, res) => {
   userPermissions.set(req.params.userId, safe);
   void persistState();
   return res.json({ ok: true, permissions: safe });
+});
+
+// ── Audit log (admin) ──────────────────────────────────────────────────────────
+// Proxies the Pi Agent's internal activity log over Tailscale. The detailed
+// trail (which local IP was contacted, latency, errors) lives only on the Pi.
+
+app.get('/api/admin/audit', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) {
+    return res.json({ entries: [], configured: false });
+  }
+  try {
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
+    const kindParam = typeof req.query.kind === 'string' ? `&kind=${encodeURIComponent(req.query.kind)}` : '';
+    const r = await piAgentFetch(`/audit?limit=${limit}${kindParam}`);
+    if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
+    const data = await r.json() as { entries: unknown[] };
+    return res.json({ entries: data.entries ?? [], configured: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
 });
 
 // ── Static frontend ───────────────────────────────────────────────────────────

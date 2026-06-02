@@ -1,8 +1,12 @@
 node_modules/
 .env
 .env.*
+!.env.example
 dist/
 .vite/
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+
+# Pi Agent runtime data (device secrets + audit log) — never commit
+pi-agent/data/
