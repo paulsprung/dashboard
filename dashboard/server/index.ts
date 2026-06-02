@@ -115,6 +115,8 @@ type TailscaleConfig    = { type: 'tailscale'; apiKey: string; tailnet: string }
 
 type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | TasmotaConfig | DockerConfig | TailscaleConfig;
 
+type DeviceType = DeviceConfig['type'];
+
 type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http' | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: PermissionFlag[] = [
@@ -126,9 +128,10 @@ const ALL_PERMISSIONS: PermissionFlag[] = [
 type DeviceRecord = {
   id: string;
   name: string;
+  type: DeviceType;           // always present — used for icons, filtering, permissions
   room?: string;
   icon?: string;
-  config: DeviceConfig;
+  config?: DeviceConfig;      // only in legacy mode (PI_AGENT_URL not set)
   requiredPermissions: PermissionFlag[];
 };
 
@@ -238,7 +241,14 @@ const hydrateState = (payload: any) => {
   devices.clear();
   widgets.clear();
   userPermissions.clear();
-  for (const [k, v] of payload.devices ?? []) devices.set(k, v as DeviceRecord);
+  for (const [k, v] of payload.devices ?? []) {
+    const rec = v as any;
+    // Ensure `type` field exists (migrate old records that stored type inside config)
+    if (!rec.type && rec.config?.type) rec.type = rec.config.type;
+    // In zero-knowledge mode, strip sensitive config — it belongs on the Pi Agent
+    if (process.env.PI_AGENT_URL && rec.config) delete rec.config;
+    devices.set(k, rec as DeviceRecord);
+  }
   for (const [k, v] of payload.widgets ?? []) widgets.set(k, v as WidgetRecord);
   for (const [k, v] of payload.userPermissions ?? []) userPermissions.set(k, v as PermissionFlag[]);
 };
@@ -699,7 +709,9 @@ app.get('/api/auth/health', (_req, res) => {
   res.json({ ok: true, rpID: getEffectiveRPID(), rpName, origin: getEffectiveOrigin(), message: 'Passkey auth server is running' });
 });
 
-// ── Monitor (TCP health checks) ───────────────────────────────────────────────
+// ── Monitor ───────────────────────────────────────────────────────────────────
+// When PI_AGENT_URL is set: Pi Agent runs TCP checks (it knows the IPs).
+// Legacy fallback: dashboard runs checks using locally stored configs.
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
 const monitorStatuses = new Map<string, MonitorStatus>();
@@ -724,12 +736,14 @@ const deviceCheckPort = (cfg: DeviceConfig): { host: string; port: number } | nu
     ssh: (cfg as SshConfig).port ?? 22,
     docker: (cfg as DockerConfig).port ?? 2375,
   };
-  const port = portMap[cfg.type];
-  return port ? { host: ip, port } : null;
+  const p = portMap[cfg.type];
+  return p ? { host: ip, port: p } : null;
 };
 
-const runMonitorChecks = async () => {
+// Legacy-mode only: run TCP checks from the dashboard (when no Pi Agent)
+const runLocalMonitorChecks = async () => {
   const promises = [...devices.values()].map(async (device) => {
+    if (!device.config) return; // zero-knowledge mode: no config on dashboard
     const target = deviceCheckPort(device.config);
     if (!target) return;
     const latency = await checkTcp(target.host, target.port);
@@ -738,11 +752,31 @@ const runMonitorChecks = async () => {
   await Promise.allSettled(promises);
 };
 
-// Run once 8s after start, then every 30s
+// Sync monitor statuses from Pi Agent (zero-knowledge mode)
+const syncMonitorFromPiAgent = async () => {
+  if (!process.env.PI_AGENT_URL || !process.env.PI_AGENT_SECRET) return;
+  try {
+    const r = await fetch(`${process.env.PI_AGENT_URL}/devices/monitor`, {
+      headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
+    });
+    if (!r.ok) return;
+    const statuses = await r.json() as MonitorStatus[];
+    for (const s of statuses) monitorStatuses.set(s.deviceId, s);
+  } catch { /* Pi Agent unreachable, keep stale data */ }
+};
+
+const runMonitorChecks = async () => {
+  if (process.env.PI_AGENT_URL) {
+    await syncMonitorFromPiAgent();
+  } else {
+    await runLocalMonitorChecks();
+  }
+};
+
 setTimeout(() => void runMonitorChecks(), 8_000);
 setInterval(() => void runMonitorChecks(), 30_000);
 
-// ── Wake-on-LAN ───────────────────────────────────────────────────────────────
+// ── Wake-on-LAN (legacy / no Pi Agent) ───────────────────────────────────────
 
 const sendWOL = (mac: string, broadcastIp = '255.255.255.255', port = 9): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -763,6 +797,29 @@ const sendWOL = (mac: string, broadcastIp = '255.255.255.255', port = 9): Promis
     });
   });
 
+// ── Pi Agent helpers ──────────────────────────────────────────────────────────
+
+const piAgentFetch = (path: string, init: RequestInit = {}): Promise<Response> => {
+  const url = `${process.env.PI_AGENT_URL}${path}`;
+  return fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.PI_AGENT_SECRET}`,
+      ...(init.headers as Record<string, string> ?? {}),
+    },
+  });
+};
+
+const hasPiAgent = () => Boolean(process.env.PI_AGENT_URL && process.env.PI_AGENT_SECRET);
+
+// Strips sensitive config before returning device to client.
+// In zero-knowledge mode the config is never stored on this server at all.
+const safeDevice = (d: DeviceRecord) => ({
+  id: d.id, name: d.name, type: d.type, room: d.room, icon: d.icon,
+  requiredPermissions: d.requiredPermissions,
+});
+
 // ── Device routes ─────────────────────────────────────────────────────────────
 
 const userHasDeviceAccess = (userId: string, role: UserRole, device: DeviceRecord): boolean => {
@@ -775,38 +832,89 @@ app.get('/api/devices', (req, res) => {
   const user = getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   const userId = Buffer.from(user.id).toString('base64url');
-  const list = [...devices.values()].filter((d) => userHasDeviceAccess(userId, user.role, d));
+  const list = [...devices.values()]
+    .filter((d) => userHasDeviceAccess(userId, user.role, d))
+    .map(safeDevice); // never return sensitive config to client
   return res.json({ devices: list });
 });
 
-app.post('/api/devices', (req, res) => {
-  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord>;
-  if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
-  const id = crypto.randomBytes(12).toString('base64url');
-  const device: DeviceRecord = { id, name, room, icon, config, requiredPermissions: requiredPermissions ?? [] };
-  devices.set(id, device);
-  void persistState();
-  return res.status(201).json({ device });
-});
-
-app.patch('/api/devices/:id', (req, res) => {
+// Admin-only: fetch sensitive config for a device (from Pi Agent in zero-knowledge mode).
+// Used to pre-fill the edit form. Config is fetched on demand, never stored in browser state.
+app.get('/api/devices/:id/config', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   const device = devices.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord>;
+  if (hasPiAgent()) {
+    try {
+      const r = await piAgentFetch(`/devices/config/${req.params.id}`);
+      if (r.status === 404) return res.json({ config: null }); // not yet synced
+      if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
+      return res.json({ config: await r.json() });
+    } catch {
+      return res.status(502).json({ error: 'Pi Agent unreachable' });
+    }
+  }
+  // Legacy mode: config is stored locally
+  return res.json({ config: device.config ?? null });
+});
+
+app.post('/api/devices', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
+  const id = crypto.randomBytes(12).toString('base64url');
+
+  if (hasPiAgent()) {
+    // Zero-knowledge mode: push sensitive config to Pi Agent, store only metadata here
+    try {
+      const r = await piAgentFetch('/devices/config', { method: 'POST', body: JSON.stringify({ id, ...config }) });
+      if (!r.ok) return res.status(502).json({ error: `Pi Agent rejected config: ${r.status}` });
+    } catch (err) {
+      return res.status(502).json({ error: `Pi Agent unreachable: ${(err as Error).message}` });
+    }
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, requiredPermissions: requiredPermissions ?? [] };
+    devices.set(id, device);
+  } else {
+    // Legacy mode: store full config on dashboard
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, config, requiredPermissions: requiredPermissions ?? [] };
+    devices.set(id, device);
+  }
+
+  void persistState();
+  return res.status(201).json({ device: safeDevice(devices.get(id)!) });
+});
+
+app.patch('/api/devices/:id', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const device = devices.get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (name !== undefined) device.name = name;
   if (room !== undefined) device.room = room;
   if (icon !== undefined) device.icon = icon;
-  if (config !== undefined) device.config = config;
   if (requiredPermissions !== undefined) device.requiredPermissions = requiredPermissions;
+  if (config !== undefined) {
+    device.type = config.type;
+    if (hasPiAgent()) {
+      try {
+        await piAgentFetch(`/devices/config/${req.params.id}`, { method: 'PUT', body: JSON.stringify({ id: req.params.id, ...config }) });
+      } catch { /* non-fatal: Pi Agent may be temporarily unreachable */ }
+    } else {
+      device.config = config;
+    }
+  }
   void persistState();
-  return res.json({ device });
+  return res.json({ device: safeDevice(device) });
 });
 
-app.delete('/api/devices/:id', (req, res) => {
+app.delete('/api/devices/:id', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   if (!devices.has(req.params.id)) return res.status(404).json({ error: 'Device not found' });
+  if (hasPiAgent()) {
+    try {
+      await piAgentFetch(`/devices/config/${req.params.id}`, { method: 'DELETE' });
+    } catch { /* non-fatal */ }
+  }
   devices.delete(req.params.id);
   void persistState();
   return res.json({ ok: true });
@@ -820,18 +928,15 @@ app.post('/api/devices/:id/action', async (req, res) => {
   const userId = Buffer.from(user.id).toString('base64url');
   if (!userHasDeviceAccess(userId, user.role, device)) return res.status(403).json({ error: 'Permission denied' });
 
-  const { action, vmId, vmAction } = req.body as { action?: string; vmId?: string; vmAction?: string };
+  const { action } = req.body as { action?: string };
+  if (!action) return res.status(400).json({ error: 'action is required' });
 
-  // Forward to Pi Agent if configured — Pi has direct local network access
-  if (process.env.PI_AGENT_URL && process.env.PI_AGENT_SECRET) {
+  // Zero-knowledge mode: forward to Pi Agent using only the device ID — no config sent over the wire
+  if (hasPiAgent()) {
     try {
-      const r = await fetch(`${process.env.PI_AGENT_URL}/proxy`, {
+      const r = await piAgentFetch('/proxy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.PI_AGENT_SECRET}`,
-        },
-        body: JSON.stringify({ config: device.config, action, ...req.body }),
+        body: JSON.stringify({ deviceId: req.params.id, action, ...req.body }),
       });
       const data = await r.json();
       return res.status(r.status).json(data);
@@ -841,8 +946,11 @@ app.post('/api/devices/:id/action', async (req, res) => {
     }
   }
 
+  // Legacy mode (no Pi Agent): execute directly using locally stored config
+  const cfg = device.config;
+  if (!cfg) return res.status(503).json({ error: 'Pi Agent required but not configured. Set PI_AGENT_URL in .env.' });
+
   try {
-    const cfg = device.config;
     if (cfg.type === 'shelly_plug' || cfg.type === 'shelly_light') {
       const channel = (cfg as ShellyPlugConfig).channel ?? 0;
       const relayPath = cfg.type === 'shelly_plug' ? 'relay' : 'light';
@@ -873,10 +981,9 @@ app.post('/api/devices/:id/action', async (req, res) => {
         if (!r.ok) return res.status(502).json({ error: 'Proxmox API error', status: r.status });
         return res.json(await r.json());
       }
+      const { vmId, vmAction } = req.body as { vmId?: string; vmAction?: string };
       if (vmId && vmAction && ['start', 'stop', 'reboot', 'shutdown'].includes(vmAction)) {
-        const r = await fetch(`${base}/nodes/${node}/qemu/${vmId}/status/${vmAction}`, {
-          method: 'POST', headers, agent: agent as any,
-        } as any);
+        const r = await fetch(`${base}/nodes/${node}/qemu/${vmId}/status/${vmAction}`, { method: 'POST', headers, agent: agent as any } as any);
         return res.json(await r.json());
       }
       return res.status(400).json({ error: 'Use action=list_vms or provide vmId+vmAction' });
@@ -891,34 +998,27 @@ app.post('/api/devices/:id/action', async (req, res) => {
 
     if (cfg.type === 'http') {
       const actionPath = action === 'on' ? cfg.onPath : (cfg.offPath ?? cfg.onPath);
-      const method = cfg.method ?? 'GET';
-      const r = await fetch(`http://${cfg.ip}${actionPath}`, { method });
+      const r = await fetch(`http://${cfg.ip}${actionPath}`, { method: cfg.method ?? 'GET' });
       return res.json({ ok: true, status: r.status });
     }
 
     if (cfg.type === 'tasmota') {
       const ch = req.body.channel ? `${Number(req.body.channel)}` : '';
-      if (action === 'on' || action === 'off' || action === 'toggle') {
+      if (['on', 'off', 'toggle'].includes(action)) {
         const cmd = `Power${ch}+${action.charAt(0).toUpperCase() + action.slice(1)}`;
         const r = await fetch(`http://${cfg.ip}/cm?cmnd=${encodeURIComponent(cmd)}`);
         return res.json(await r.json());
       }
-      if (action === 'status') {
-        const r = await fetch(`http://${cfg.ip}/cm?cmnd=Power${ch}`);
-        return res.json(await r.json());
-      }
-      if (action === 'energy') {
-        const r = await fetch(`http://${cfg.ip}/cm?cmnd=Status+10`);
-        return res.json(await r.json());
-      }
-      return res.status(400).json({ error: 'Supported actions: on, off, toggle, status, energy' });
+      if (action === 'status') { const r = await fetch(`http://${cfg.ip}/cm?cmnd=Power${ch}`); return res.json(await r.json()); }
+      if (action === 'energy') { const r = await fetch(`http://${cfg.ip}/cm?cmnd=Status+10`); return res.json(await r.json()); }
+      return res.status(400).json({ error: 'Supported: on, off, toggle, status, energy' });
     }
 
     if (cfg.type === 'docker') {
       const base = `http://${cfg.ip}:${cfg.port ?? 2375}`;
       if (action === 'list_containers') {
         const r = await fetch(`${base}/containers/json?all=1`);
-        if (!r.ok) return res.status(502).json({ error: 'Docker API error', status: r.status });
+        if (!r.ok) return res.status(502).json({ error: 'Docker API error' });
         return res.json(await r.json());
       }
       const { containerId, containerAction } = req.body as { containerId?: string; containerAction?: string };
@@ -926,16 +1026,15 @@ app.post('/api/devices/:id/action', async (req, res) => {
         const r = await fetch(`${base}/containers/${containerId}/${containerAction}`, { method: 'POST' });
         return res.json({ ok: r.ok, status: r.status });
       }
-      return res.status(400).json({ error: 'Use action=list_containers or provide containerId+containerAction' });
+      return res.status(400).json({ error: 'Use list_containers or containerId+containerAction' });
     }
 
     if (cfg.type === 'tailscale') {
       if (action !== 'list_devices') return res.status(400).json({ error: 'Only list_devices is supported' });
-      const tailnet = encodeURIComponent(cfg.tailnet);
-      const r = await fetch(`https://api.tailscale.com/api/v2/tailnet/${tailnet}/devices`, {
+      const r = await fetch(`https://api.tailscale.com/api/v2/tailnet/${encodeURIComponent(cfg.tailnet)}/devices`, {
         headers: { Authorization: `Bearer ${cfg.apiKey}` },
       });
-      if (!r.ok) return res.status(502).json({ error: 'Tailscale API error', status: r.status });
+      if (!r.ok) return res.status(502).json({ error: 'Tailscale API error' });
       return res.json(await r.json());
     }
 

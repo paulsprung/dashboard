@@ -45,8 +45,9 @@ type DeviceConfig =
   | { type: 'tailscale'; apiKey: string; tailnet: string };
 
 type Device = {
-  id: string; name: string; room?: string; icon?: string;
-  config: DeviceConfig; requiredPermissions: PermissionFlag[];
+  id: string; name: string; type: string; room?: string; icon?: string;
+  config?: DeviceConfig; // absent in zero-knowledge mode (Pi Agent configured)
+  requiredPermissions: PermissionFlag[];
 };
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
@@ -358,14 +359,15 @@ function DeviceForm({
   initial, onSave, onCancel, t, accent,
 }: {
   initial?: Partial<Device>;
-  onSave: (d: Omit<Device, 'id'>) => Promise<void>;
+  onSave: (d: Omit<Device, 'id'> & { config: DeviceConfig }) => Promise<void>;
   onCancel: () => void;
   t: ReturnType<typeof tok>;
   accent: string;
 }) {
+  const isEdit = Boolean(initial?.id);
   const [name, setName] = useState(initial?.name ?? '');
   const [room, setRoom] = useState(initial?.room ?? '');
-  const [type, setType] = useState<string>(initial?.config?.type ?? 'shelly_plug');
+  const [type, setType] = useState<string>(initial?.type ?? initial?.config?.type ?? 'shelly_plug');
   const [ip, setIp] = useState((initial?.config as any)?.ip ?? '');
   const [channel, setChannel] = useState(String((initial?.config as any)?.channel ?? '0'));
   const [mac, setMac] = useState((initial?.config as any)?.mac ?? '');
@@ -384,6 +386,34 @@ function DeviceForm({
   const [tailscaleTailnet, setTailscaleTailnet] = useState((initial?.config as any)?.tailnet ?? '');
   const [perms, setPerms] = useState<PermissionFlag[]>(initial?.requiredPermissions ?? []);
   const [loading, setLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
+
+  // When editing an existing device, load the sensitive config from server (Pi Agent)
+  useEffect(() => {
+    if (!isEdit || !initial?.id || initial.config) return; // config already available
+    setConfigLoading(true);
+    fetch(`/api/devices/${initial.id}/config`, { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { config: any } | null) => {
+        if (!d?.config) return;
+        const c = d.config;
+        if (c.ip) setIp(c.ip);
+        if (c.mac) setMac(c.mac);
+        if (c.broadcastIp) setBroadcastIp(c.broadcastIp);
+        if (c.tokenId) setTokenId(c.tokenId);
+        if (c.tokenSecret) setTokenSecret(c.tokenSecret);
+        if (c.node) setPxNode(c.node);
+        if (c.allowSelfSigned !== undefined) setAllowSelfSigned(c.allowSelfSigned);
+        if (c.username) setUsername(c.username);
+        if (c.port) setPort(String(c.port));
+        if (c.onPath) setOnPath(c.onPath);
+        if (c.offPath) setOffPath(c.offPath);
+        if (c.channels) setTasmotaChannels(String(c.channels));
+        if (c.apiKey) setTailscaleApiKey(c.apiKey);
+        if (c.tailnet) setTailscaleTailnet(c.tailnet);
+      })
+      .finally(() => setConfigLoading(false));
+  }, [isEdit, initial?.id]);
 
   // auto-suggest permission when type changes
   useEffect(() => {
@@ -410,7 +440,7 @@ function DeviceForm({
     const config = buildConfig();
     if (!name || !config) return;
     setLoading(true);
-    await onSave({ name, room: room || undefined, config, requiredPermissions: perms });
+    await onSave({ name, type: config.type, room: room || undefined, config, requiredPermissions: perms });
     setLoading(false);
   };
 
@@ -419,6 +449,11 @@ function DeviceForm({
 
   return (
     <div className="space-y-4">
+      {configLoading && (
+        <div className={`flex items-center gap-2 text-sm ${t.muted}`}>
+          <Spinner size={14} /> Konfiguration wird geladen…
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Input label="Name" value={name} onChange={setName} placeholder="Wohnzimmer Steckdose" t={t} accent={accent} autoFocus />
         <Input label="Raum (optional)" value={room} onChange={setRoom} placeholder="Wohnzimmer" t={t} accent={accent} />
@@ -578,7 +613,7 @@ function WidgetForm({
     setLoading(false);
   };
 
-  const deviceOptions = devices.map((d) => ({ value: d.id, label: `${deviceTypeIcon(d.config.type)} ${d.name}${d.room ? ` (${d.room})` : ''}` }));
+  const deviceOptions = devices.map((d) => ({ value: d.id, label: `${deviceTypeIcon(d.type)} ${d.name}${d.room ? ` (${d.room})` : ''}` }));
 
   return (
     <div className="space-y-4">
@@ -612,7 +647,7 @@ function WidgetForm({
         <div className="space-y-3">
           {deviceOptions.length > 0
             ? <Select label="Gerät" value={deviceId} onChange={setDeviceId}
-                options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'wol')}
+                options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'wol')}
                 t={t} accent={accent} />
             : <p className={`text-sm ${t.muted}`}>Kein WOL-Gerät vorhanden.</p>}
           <Input label="Beschriftung (opt.)" value={wolLabel} onChange={setWolLabel} placeholder="Server aufwecken" t={t} accent={accent} />
@@ -620,17 +655,17 @@ function WidgetForm({
       )}
       {(wtype === 'energy') && (
         <Select label="Tasmota-Gerät" value={deviceId} onChange={setDeviceId}
-          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'tasmota')}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'tasmota')}
           t={t} accent={accent} />
       )}
       {wtype === 'docker_containers' && (
         <Select label="Docker-Host" value={deviceId} onChange={setDeviceId}
-          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'docker')}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'docker')}
           t={t} accent={accent} />
       )}
       {wtype === 'tailscale_peers' && (
         <Select label="Tailscale-Konfiguration" value={deviceId} onChange={setDeviceId}
-          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.config.type === 'tailscale')}
+          options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'tailscale')}
           t={t} accent={accent} />
       )}
       {wtype === 'monitor' && (
@@ -743,7 +778,7 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
           <p className={`text-sm font-medium ${t.text}`}>{device.name}</p>
           {device.room && <p className={`text-xs ${t.muted}`}>{device.room}</p>}
         </div>
-        <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.config.type)}</span>
+        <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.type)}</span>
       </div>
       {on !== null && (
         <div className="flex items-center gap-1.5">
@@ -1025,7 +1060,7 @@ function MonitorWidget({ devices, t, accent, statuses }: {
   devices: Device[]; t: ReturnType<typeof tok>; accent: string;
   statuses: Record<string, MonitorStatus>;
 }) {
-  const monitorable = devices.filter((d) => d.config.type !== 'wol' && d.config.type !== 'tailscale');
+  const monitorable = devices.filter((d) => d.type !== 'wol' && d.type !== 'tailscale');
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -1689,10 +1724,10 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, devices, setD
             {devices.map((d) => (
               <div key={d.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{d.icon ?? deviceTypeIcon(d.config.type)}</span>
+                  <span className="text-xl">{d.icon ?? deviceTypeIcon(d.type)}</span>
                   <div>
                     <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
-                    <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.config.type)?.label.replace(/^\S+\s/, '') ?? d.config.type}</p>
+                    <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -1780,9 +1815,9 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
                         </span>
                       )}
                     </div>
-                    <p className={`text-xs ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.config.type)?.label.replace(/^\S+\s/, '')}</p>
+                    <p className={`text-xs ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
                   </div>
-                  <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.config.type)}</span>
+                  <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.type)}</span>
                 </div>
 
                 {actionStatus[device.id] && (
@@ -1792,39 +1827,39 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
                 )}
 
                 <div className="flex flex-wrap gap-2">
-                  {(device.config.type === 'shelly_plug' || device.config.type === 'shelly_light') && (
+                  {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
                     <>
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
                       <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
                       <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
                     </>
                   )}
-                  {device.config.type === 'wol' && (
+                  {device.type === 'wol' && (
                     <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
                   )}
-                  {device.config.type === 'proxmox' && (
+                  {device.type === 'proxmox' && (
                     <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
                   )}
-                  {(device.config.type === 'rdp' || device.config.type === 'ssh') && (
+                  {(device.type === 'rdp' || device.type === 'ssh') && (
                     <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
                   )}
-                  {device.config.type === 'http' && (
+                  {device.type === 'http' && (
                     <>
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
                       <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
                     </>
                   )}
-                  {device.config.type === 'tasmota' && (
+                  {device.type === 'tasmota' && (
                     <>
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
                       <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
                       <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
                     </>
                   )}
-                  {device.config.type === 'docker' && (
+                  {device.type === 'docker' && (
                     <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
                   )}
-                  {device.config.type === 'tailscale' && (
+                  {device.type === 'tailscale' && (
                     <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
                   )}
                 </div>
