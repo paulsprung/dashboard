@@ -1578,12 +1578,15 @@ function InvitePage({ setup, inviteToken, initEmail }: {
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
-type Tab = 'home' | 'devices' | 'admin' | 'settings';
+type Tab = 'home' | 'devices' | 'discovery' | 'admin' | 'settings';
+
+const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'home',     label: 'Home',      icon: '⌂' },
-  { key: 'devices',  label: 'Geräte',   icon: '◫' },
-  { key: 'admin',    label: 'Admin',     icon: '⚙' },
+  { key: 'home',      label: 'Home',      icon: '⌂' },
+  { key: 'devices',   label: 'Geräte',   icon: '◫' },
+  { key: 'discovery', label: 'Discovery', icon: '◎' },
+  { key: 'admin',     label: 'Admin',     icon: '⚙' },
 ];
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -2170,6 +2173,179 @@ const auditKindLabel = (k: AuditEntry['kind']): string => ({
   auth_fail: 'Auth ✗',
 }[k] ?? k);
 
+// ── Discovery tab (admin only) ──────────────────────────────────────────────────
+
+type HostAgentInfo = {
+  id: string; hostname: string; ip: string; tailscaleIp?: string;
+  services: string[]; registeredAt: number; lastSeen: number; online: boolean;
+};
+
+function DiscoveryTab({ devices, setDevices, t, accent }: {
+  devices: Device[]; setDevices: (d: Device[]) => void;
+  t: ReturnType<typeof tok>; accent: string;
+}) {
+  const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
+  const [agents, setAgents] = useState<HostAgentInfo[]>([]);
+  const [configured, setConfigured] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState('');
+  const [lastScan, setLastScan] = useState<number | null>(null);
+
+  useEffect(() => { void load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
+      if (r.ok) {
+        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean };
+        setDiscovered(d.devices ?? []);
+        setAgents(d.agents ?? []);
+        setConfigured(d.configured);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scan = async () => {
+    setScanning(true); setStatus('');
+    try {
+      const r = await fetch('/api/pi-agent/discover', { method: 'POST', credentials: 'include' });
+      if (r.status === 400) { setConfigured(false); return; }
+      await new Promise((res) => setTimeout(res, 6000)); // Pi scans in the background
+      await load();
+      setLastScan(Date.now());
+    } catch {
+      setStatus('✗ Pi Agent nicht erreichbar');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // A discovered device counts as "known" if we already have a device of the same
+  // type whose stored hostname/name matches — best effort, since IPs live on the Pi.
+  const isKnown = (dd: DiscoveredDevice) =>
+    devices.some((d) => d.type === dd.type && (d.name === dd.hostname || d.name.includes(dd.ip)));
+
+  const addDiscovered = async (dd: DiscoveredDevice) => {
+    const type = dd.type === 'unknown' ? 'http' : dd.type;
+    const suggested = deviceTypePermission(type);
+    const config = type === 'http'
+      ? { type, ip: dd.ip, onPath: '/' }
+      : { type, ip: dd.ip };
+    const r = await fetch('/api/devices', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({
+        name: dd.hostname || `${type} ${dd.ip}`,
+        type, config,
+        requiredPermissions: suggested ? [suggested] : [],
+      }),
+    });
+    if (r.ok) {
+      const { device } = await r.json() as { device: Device };
+      setDevices([...devices, device]);
+      setStatus(`✓ ${device.name} hinzugefügt${(type === 'proxmox' || type === 'docker') ? ' — Zugangsdaten in Einstellungen ergänzen' : ''}`);
+    } else {
+      setStatus(`✗ ${await readErr(r, 'Konnte Gerät nicht hinzufügen')}`);
+    }
+    setTimeout(() => setStatus(''), 4000);
+  };
+
+  return (
+    <div className="animate-slide-right space-y-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className={`text-xl font-semibold ${t.text}`}>Discovery</h1>
+          <p className={`text-sm ${t.muted}`}>Im Heimnetz gefundene Geräte und registrierte Host-Agents.</p>
+        </div>
+        <Btn accent={accent} onClick={scan} loading={scanning}>🔍 Netzwerk scannen</Btn>
+      </div>
+
+      {status && <StatusMsg msg={status} t={t} />}
+
+      {!configured ? (
+        <div className={`rounded-2xl border p-12 text-center ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+          <p className="text-4xl mb-3">◎</p>
+          <p className={`font-medium ${t.text}`}>Kein Pi Agent konfiguriert</p>
+          <p className={`mt-1 text-sm ${t.muted}`}>Setze <code>PI_AGENT_URL</code> in der Dashboard-Konfiguration, um Discovery zu nutzen.</p>
+        </div>
+      ) : (
+        <>
+          {/* Discovered devices */}
+          <section className={`rounded-2xl border p-5 space-y-3 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+            <div className="flex items-center justify-between">
+              <h2 className={`font-semibold ${t.text}`}>Gefundene Geräte</h2>
+              <span className={`text-xs ${t.muted}`}>
+                {lastScan ? `Zuletzt gescannt: ${new Date(lastScan).toLocaleTimeString('de-DE')}` : `${discovered.length} bekannt`}
+              </span>
+            </div>
+            {loading ? (
+              <Spinner size={20} color={accent} />
+            ) : discovered.length === 0 ? (
+              <p className={`text-sm ${t.muted}`}>Noch nichts gefunden. Starte einen Scan — der Pi durchsucht ARP-Tabelle und mDNS.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {discovered.map((dd, i) => {
+                  const known = isKnown(dd);
+                  return (
+                    <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}
+                      style={{ borderColor: `${accent}18` }}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
+                          <p className={`text-xs ${t.muted}`}>
+                            {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unbekannt' : dd.type}
+                            <span className="ml-1 opacity-60">({dd.via})</span>
+                          </p>
+                        </div>
+                      </div>
+                      {known
+                        ? <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500`}>konfiguriert</span>
+                        : <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Hinzufügen</Btn>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Host agents */}
+          <section className={`rounded-2xl border p-5 space-y-3 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+            <h2 className={`font-semibold ${t.text}`}>Host-Agents</h2>
+            <p className={`text-sm ${t.muted}`}>Server, die sich selbst beim Pi Agent melden (z. B. Proxmox, Docker-Hosts).</p>
+            {agents.length === 0 ? (
+              <p className={`text-sm ${t.muted}`}>Keine Host-Agents registriert.</p>
+            ) : (
+              <div className="space-y-2">
+                {agents.map((a) => (
+                  <div key={a.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
+                    <div className="flex items-center gap-3">
+                      <span className={`h-2 w-2 rounded-full ${a.online ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <div>
+                        <p className={`text-sm font-medium ${t.text}`}>{a.hostname}</p>
+                        <p className={`text-xs ${t.muted}`}>
+                          {a.ip}{a.tailscaleIp ? ` · ts: ${a.tailscaleIp}` : ''}
+                          {a.services.length ? ` · ${a.services.join(', ')}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-xs ${t.muted}`}>
+                      {a.online ? 'online' : `zuletzt ${new Date(a.lastSeen).toLocaleTimeString('de-DE')}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard shell ───────────────────────────────────────────────────────────
 
 function Dashboard({ user, setup, onSignOut }: {
@@ -2186,7 +2362,7 @@ function Dashboard({ user, setup, onSignOut }: {
   const [showAddWidget, setShowAddWidget] = useState(false);
 
   const canAdmin = user.role === 'root' || user.role === 'admin';
-  const visibleNav = NAV.filter((n) => n.key !== 'admin' || canAdmin);
+  const visibleNav = NAV.filter((n) => !ADMIN_ONLY_TABS.includes(n.key) || canAdmin);
 
   useEffect(() => {
     void fetch('/api/devices', { credentials: 'include' })
@@ -2347,6 +2523,10 @@ function Dashboard({ user, setup, onSignOut }: {
               widgets={widgets} setWidgets={setWidgets}
               t={t}
             />
+          )}
+
+          {tab === 'discovery' && canAdmin && (
+            <DiscoveryTab devices={devices} setDevices={setDevices} t={t} accent={accent} />
           )}
 
           {tab === 'admin' && canAdmin && (
