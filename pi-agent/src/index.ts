@@ -22,7 +22,7 @@ app.use(express.json({ limit: '1mb' }));
 
 const port = Number(process.env.PORT ?? 3002);
 const agentSecret = process.env.AGENT_SECRET;
-const bindHost = process.env.BIND_HOST ?? '0.0.0.0';
+const bindHost = process.env.BIND_HOST ?? '127.0.0.1';
 const dataDir = process.env.DATA_DIR ?? './data';
 const configsFile = path.join(dataDir, 'device-configs.json');
 

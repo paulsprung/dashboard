@@ -64,6 +64,18 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 app.use('/api/setup/', authLimiter);
 
+// Prevent authenticated sessions from spamming device actions or discovery scans
+const actionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, slow down.' },
+});
+app.use('/api/devices/:id/action', actionLimiter);
+app.use('/api/pi-agent/discover', actionLimiter);
+app.use('/api/monitor/check', actionLimiter);
+
 const rpName = process.env.RP_NAME ?? 'SM Dashboard';
 const port = Number(process.env.PORT ?? 3001);
 const sessionCookieName = 'sm_session';
@@ -501,10 +513,14 @@ app.post('/api/setup/root/verify-registration', async (req, res) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
+    user.currentChallenge = undefined;
     return res.status(400).json({ error: message });
   }
 
-  if (!verification.verified || !verification.registrationInfo) return res.status(400).json({ verified: false });
+  if (!verification.verified || !verification.registrationInfo) {
+    user.currentChallenge = undefined;
+    return res.status(400).json({ verified: false });
+  }
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
   const alreadyRegistered = user.authenticators.some((item) => item.credentialID === credential.id);
   if (!alreadyRegistered) {
@@ -571,10 +587,14 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
     console.error('verify-registration failed', { message });
+    user.currentChallenge = undefined;
     return res.status(400).json({ error: message });
   }
 
-  if (!verification.verified || !verification.registrationInfo) return res.status(400).json({ verified: false });
+  if (!verification.verified || !verification.registrationInfo) {
+    user.currentChallenge = undefined;
+    return res.status(400).json({ verified: false });
+  }
 
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
   if (!user.authenticators.some((item) => item.credentialID === credential.id)) {
@@ -667,6 +687,8 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   }
 
   if (!verification.verified) {
+    user.currentChallenge = undefined; // consume challenge even on failure to prevent replay
+    void persistState();
     return res.status(401).json({ verified: false });
   }
 
@@ -677,7 +699,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   const loginUserId = Buffer.from(user.id).toString('base64url');
   const loginSessionToken = createSession(loginUserId);
   const isSecure = !origin.startsWith('http://localhost');
-  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(loginSessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}${isSecure ? '; Secure' : ''}`);
+  res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(loginSessionToken)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_MS / 1000}${isSecure ? '; Secure' : ''}`);
 
   return res.json({
     verified: true,
@@ -701,7 +723,7 @@ app.post('/api/auth/logout', (req, res) => {
   if (token) sessions.delete(token);
   void persistState();
   const isSecure = !origin.startsWith('http://localhost');
-  res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure ? '; Secure' : ''}`);
+  res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${isSecure ? '; Secure' : ''}`);
   return res.json({ ok: true });
 });
 

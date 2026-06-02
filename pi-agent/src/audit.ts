@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 // ── Audit log ───────────────────────────────────────────────────────────────
@@ -34,6 +34,8 @@ export type AuditEntry = {
 const dataDir = process.env.DATA_DIR ?? './data';
 const logFile = path.join(dataDir, 'audit.log');
 const MAX_MEMORY = 1000;        // keep last N entries in memory for fast reads
+const MAX_LOG_BYTES = 5 * 1024 * 1024; // rotate at 5 MB
+let writesSinceRotationCheck = 0;
 const ring: AuditEntry[] = [];
 
 // Load the tail of the on-disk log into memory on startup, so a restart
@@ -61,6 +63,16 @@ export const logEvent = (entry: Omit<AuditEntry, 'ts'>): void => {
   try {
     mkdirSync(dataDir, { recursive: true });
     appendFileSync(logFile, JSON.stringify(full) + '\n', 'utf8');
+    // Rotate log file if it grows beyond MAX_LOG_BYTES (checked every 100 writes)
+    if (++writesSinceRotationCheck >= 100) {
+      writesSinceRotationCheck = 0;
+      try {
+        if (statSync(logFile).size > MAX_LOG_BYTES) {
+          renameSync(logFile, logFile + '.1');
+          console.log('[audit] Log rotated (>5 MB)');
+        }
+      } catch { /* ignore stat/rename errors */ }
+    }
   } catch (err) {
     console.error('Audit write failed:', err);
   }
