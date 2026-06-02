@@ -111,6 +111,8 @@ The Pi keeps the detailed internal trail (which IP was contacted, status code, l
 | `pi-agent/` | Raspberry Pi | Stores secrets, executes commands, discovery, health checks, audit log |
 | `host-agent/` | Any server (Proxmox, Docker…) | Auto-reports its current IP to the Pi Agent |
 
+Docker images are built automatically via GitHub Actions and published to GHCR on every push to `main`.
+
 ---
 
 ## 1. Tailscale Setup
@@ -147,39 +149,42 @@ Handles device commands, discovery, host-agent registration, health checks, and 
 ### Install
 
 ```bash
-git clone https://github.com/paulsprung/sm-dashboard.git
-cd sm-dashboard/pi-agent
-cp .env.example .env
+mkdir ~/pi-agent && cd ~/pi-agent
+
+# Download the compose file
+curl -O https://raw.githubusercontent.com/paulsprung/sm-dashboard/main/pi-agent/compose.yml
+
+# Create your .env
 nano .env
 ```
 
-`.env`:
+**`.env`** (create this file):
 
 ```env
-# Secret shared with the dashboard — must be long and random
+# Shared secret — must match PI_AGENT_SECRET in the dashboard .env
 AGENT_SECRET=generate_with_openssl_rand_hex_32
+
+# Bind ONLY to the Tailscale interface (not the LAN, not the internet)
+BIND_HOST=100.64.0.2          # your Pi's Tailscale IP (tailscale ip -4)
 
 # Port to listen on (default 3002)
 PORT=3002
 
-# Bind ONLY to the Tailscale interface (not the LAN, not the internet)
-BIND_HOST=100.64.0.2          # your Pi's Tailscale IP
-
-# Local subnet for ARP discovery
+# Local subnet for ARP/mDNS discovery
 LOCAL_SUBNET=192.168.1.0/24
 
 # Where device configs + audit log are stored (persisted via Docker volume)
 DATA_DIR=./data
 ```
 
-> **Security note:** Set `BIND_HOST` to the Pi's Tailscale IP (`tailscale ip -4`) so the
-> agent is reachable only through the tunnel. The `data/` directory holds your secrets
-> and audit log — it is mounted as a Docker volume so it survives restarts. Back it up.
+> **Security note:** Set `BIND_HOST` to the Pi's Tailscale IP so the agent is reachable
+> only through the tunnel. The `data/` directory holds your device secrets and audit log —
+> it is mounted as a Docker volume so it survives restarts. **Back it up.**
 
 ### Start
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f
 ```
 
@@ -203,32 +208,36 @@ curl -H "Authorization: Bearer <your_secret>" http://100.64.0.2:3002/audit?limit
 ### Install
 
 ```bash
-git clone https://github.com/paulsprung/sm-dashboard.git
-cd sm-dashboard/dashboard
-cp .env.example .env
+mkdir ~/sm-dashboard && cd ~/sm-dashboard
+
+# Download the compose file
+curl -O https://raw.githubusercontent.com/paulsprung/sm-dashboard/main/dashboard/compose.yml
+
+# Create your .env
 nano .env
 ```
 
-`.env`:
+**`.env`** (create this file):
 
 ```env
-# PostgreSQL (internal to Docker network) — stores users, sessions, device METADATA
+# PostgreSQL — stores users, sessions, device metadata (no secrets)
 POSTGRES_USER=sm_dashboard
 POSTGRES_PASSWORD=generate_strong_password_here
 POSTGRES_DB=sm_dashboard
-DATABASE_URL=postgresql://sm_dashboard:<password>@postgres:5432/sm_dashboard
+DATABASE_URL=postgresql://sm_dashboard:generate_strong_password_here@postgres:5432/sm_dashboard
 
 # WebAuthn / Passkey
-RP_ID=dashboard.yourdomain.com         # hostname only, no https://
-RP_NAME=SM Dashboard
 ORIGIN=https://dashboard.yourdomain.com
+RP_ID=dashboard.yourdomain.com
+RP_NAME=SM Dashboard
+REQUIRE_USER_VERIFICATION=true
 
-# Pi Agent connection (over Tailscale). Setting this enables zero-knowledge mode:
-# the dashboard forwards configs to the Pi and stops storing them locally.
+# Pi Agent connection (over Tailscale) — enables zero-knowledge mode
 PI_AGENT_URL=http://100.64.0.2:3002
-PI_AGENT_SECRET=same_secret_as_pi_agent
+PI_AGENT_SECRET=same_secret_as_pi_agent_AGENT_SECRET
 
 PORT=3001
+STRICT_PERSISTENCE=true
 ```
 
 > **Without `PI_AGENT_URL`** the dashboard runs in *legacy mode*: it stores device configs
@@ -238,7 +247,7 @@ PORT=3001
 ### Start
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f sm-dashboard
 ```
 
@@ -280,55 +289,53 @@ Runs on servers (Proxmox, Docker hosts…) and auto-reports their current IP to 
 ### Install
 
 ```bash
-cd sm-dashboard/host-agent
-npm install
-cp .env.example .env
+mkdir ~/host-agent && cd ~/host-agent
+
+# Download the compose file
+curl -O https://raw.githubusercontent.com/paulsprung/sm-dashboard/main/host-agent/compose.yml
+
+# Create your .env
 nano .env
 ```
 
-`.env`:
+**`.env`** (create this file):
 
 ```env
+# Tailscale IP of the Raspberry Pi running the Pi Agent
 PI_AGENT_URL=http://100.64.0.2:3002
+
+# Must match AGENT_SECRET in pi-agent .env
 AGENT_SECRET=same_secret_as_pi_agent
+
+# Optional: override auto-detected hostname
 # HOSTNAME_OVERRIDE=my-proxmox-server
+
+# Heartbeat interval in seconds (default: 30)
 HEARTBEAT_INTERVAL=30
 ```
 
-### Run as systemd service
-
-`/etc/systemd/system/sm-host-agent.service`:
-
-```ini
-[Unit]
-Description=SM Dashboard Host Agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/sm-dashboard/host-agent
-EnvironmentFile=/opt/sm-dashboard/host-agent/.env
-ExecStart=/usr/bin/node --import tsx/esm src/index.ts
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
+### Start
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now sm-host-agent
-sudo systemctl status sm-host-agent
+docker compose up -d
+docker compose logs -f
 ```
 
-Registered agents appear in **Admin → Aktivitätsprotokoll** and at `GET /agents` on the Pi.
+Registered agents appear in **Admin → Discovery** and at `GET /agents` on the Pi.
 
 ---
 
-## 5. Adding Devices
+## 5. Updating
+
+All three components update the same way — pull the latest image and restart:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+---
+
+## 6. Adding Devices
 
 In the dashboard: **Settings → Devices → Add Device**. You enter the full details once;
 the dashboard forwards everything sensitive to the Pi and keeps only the metadata.
@@ -350,15 +357,15 @@ the dashboard forwards everything sensitive to the Pi and keeps only the metadat
 
 ### Device Discovery (no manual IPs)
 
-1. **Settings → Devices → Discover Devices**
+1. **Admin → Discovery → Netzwerk scannen**
 2. The Pi scans the LAN via ARP table + mDNS and probes known ports
-3. Detected devices come back with the type pre-filled — click **Add**
+3. Detected devices come back with the type pre-filled — click **+ Hinzufügen**
 
 Detects Shelly (`_shelly._tcp` + `/shelly`), Tasmota (`_http._tcp` + `/cm`), Docker (port 2375), Proxmox (port 8006).
 
 ---
 
-## 6. Widgets
+## 7. Widgets
 
 **Settings → Widgets → Add Widget**:
 
@@ -377,7 +384,7 @@ Detects Shelly (`_shelly._tcp` + `/shelly`), Tasmota (`_http._tcp` + `/cm`), Doc
 
 ---
 
-## 7. User Permissions
+## 8. User Permissions
 
 **Admin → Users → (select user)**. Per-flag access control:
 
@@ -397,7 +404,7 @@ Admins/root bypass all flags.
 
 ---
 
-## 8. Service Monitor
+## 9. Service Monitor
 
 The **Pi Agent** runs TCP health checks every 30s against each device (it's the one that
 knows the IPs). The dashboard pulls the aggregated result every 30s via `GET /devices/monitor`.
@@ -410,16 +417,14 @@ the dashboard runs the checks itself.
 
 ---
 
-## 9. Activity Log
+## 10. Activity Log
 
-The Pi records every internal operation to `data/audit.log` (JSON-lines, also streamed to
-`docker compose logs`):
+The Pi records every device action to `data/audit.log` in human-readable format:
 
-- **action** — device command executed (with target, status, latency, and the `actor`)
-- **config_create / update / delete** — device configuration changes
-- **agent_register / agent_ip_change** — host agents joining or changing IP
-- **discovery** — network scans
-- **auth_fail** — rejected requests (bad bearer token)
+```
+2026-06-02 14:32:15  paul@example.com  Lampe (192.168.1.10)  eingeschaltet  ✓ 45ms
+2026-06-02 14:40:22  max@example.com   Proxmox (192.168.1.5)  VMs abgerufen  ✓ 120ms
+```
 
 View it in the dashboard under **Admin → Aktivitätsprotokoll** (proxied over Tailscale),
 or directly: `curl -H "Authorization: Bearer <secret>" http://100.64.0.2:3002/audit?limit=50`.
@@ -431,17 +436,20 @@ The detailed internal trail never leaves the Pi/Tailscale tunnel.
 ## Development
 
 ```bash
-# Dashboard (legacy mode if PI_AGENT_URL unset)
-cd dashboard && npm install && cp .env.example .env
+# Dashboard (legacy mode — no Pi Agent needed)
+cd dashboard && npm install
+# create .env with at minimum: ORIGIN=http://localhost:3001, STRICT_PERSISTENCE=false
 npm run server:dev          # backend :3001
 npm run dev                 # frontend :5173 (separate terminal)
 
 # Pi Agent
-cd pi-agent && npm install && cp .env.example .env
+cd pi-agent && npm install
+# create .env with: AGENT_SECRET=any_secret, BIND_HOST=127.0.0.1
 npm run dev
 
 # Host Agent
-cd host-agent && npm install && cp .env.example .env
+cd host-agent && npm install
+# create .env with: PI_AGENT_URL=http://127.0.0.1:3002, AGENT_SECRET=any_secret
 npm run dev
 ```
 
@@ -485,10 +493,10 @@ Run Tailscale as a **sidecar** so the host kernel and sibling containers have no
 route at all — only the dashboard container does. Use the provided compose file:
 
 ```bash
-cd dashboard
-# create a tagged auth key at https://login.tailscale.com/admin/settings/keys (tag:hetzner)
+cd ~/sm-dashboard
+# Add TS_AUTHKEY to your .env (create a tagged auth key at tailscale.com/admin/settings/keys)
 echo "TS_AUTHKEY=tskey-auth-..." >> .env
-docker compose -f compose.tailscale-sidecar.yml up -d --build
+docker compose -f compose.tailscale-sidecar.yml up -d
 ```
 
 How it works: `sm-dashboard` uses `network_mode: "service:tailscale"`, so it shares the
@@ -510,4 +518,4 @@ in turn requires the shared secret.
 - **Passkeys + metadata** live in PostgreSQL on Hetzner — back up that volume too.
 - **Proxmox self-signed certs** are accepted by design for internal use. With a valid cert, set `allowSelfSigned: false` on the device.
 - **Two Tailnets** keep a Hetzner breach away from your personal devices.
-- **Shared host?** Run Tailscale as a sidecar + lock the ACL to `Pi:3002` (see "Hardening a shared Hetzner host"), so co-located services can't pivot to the Pi.
+- **Shared host?** Run Tailscale as a sidecar + lock the ACL to `Pi:3002` (see above).
