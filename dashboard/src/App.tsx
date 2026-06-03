@@ -257,8 +257,8 @@ function Btn({
   const pad = size === 'sm' ? 'px-3.5 py-[7px] text-[13px]' : 'px-4 py-[10px] text-[14px]';
   const base = `inline-flex items-center justify-center gap-2 font-medium select-none cursor-pointer
     transition-all duration-150 ease-out
-    active:scale-[0.96] disabled:opacity-40 disabled:pointer-events-none
-    ${size === 'sm' ? 'rounded-[10px]' : 'rounded-[12px]'} ${pad}`;
+    active:scale-[0.95] disabled:opacity-35 disabled:pointer-events-none
+    ${size === 'sm' ? 'rounded-[10px]' : 'rounded-[13px]'} ${pad}`;
   if (variant === 'primary') return (
     <button onClick={onClick} disabled={disabled || loading}
       className={`${base} text-white ${className}`}
@@ -1718,11 +1718,11 @@ type Tab = 'home' | 'devices' | 'discovery' | 'admin' | 'settings';
 
 const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
 
-const NAV: { key: Tab; label: string; icon: React.ReactNode }[] = [
-  { key: 'home',      label: 'Home',      icon: <IcHome /> },
-  { key: 'devices',   label: 'Geräte',   icon: <IcGrid /> },
-  { key: 'discovery', label: 'Discovery', icon: <IcRadar /> },
-  { key: 'admin',     label: 'Admin',     icon: <IcPerson /> },
+const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: 'home',      label: 'Home',      icon: <IcHome size={15} />,   color: '#007AFF' },
+  { key: 'devices',   label: 'Geräte',   icon: <IcGrid size={15} />,   color: '#5856D6' },
+  { key: 'discovery', label: 'Discovery', icon: <IcRadar size={15} />,  color: '#FF9500' },
+  { key: 'admin',     label: 'Admin',     icon: <IcPerson size={15} />, color: '#30D158' },
 ];
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -2035,31 +2035,29 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
               const st = statuses[device.id];
               return (
                 <div key={device.id}
-                  className={`glass-subtle group rounded-[20px] p-4 transition-all duration-200
-                    hover:-translate-y-0.5 animate-float-in delay-${Math.min(i, 6)}`}
-                  style={{ ['--hover-shadow' as any]: `0 8px 30px rgba(0,0,0,0.4)` }}>
+                  className={`glass-subtle group rounded-[22px] p-5 transition-all duration-250
+                    hover:-translate-y-[3px] hover:shadow-2xl animate-float-in delay-${Math.min(i, 6)}`}
+                  style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 16px rgba(0,0,0,0.3)' }}>
 
-                  {/* Header row */}
-                  <div className="flex items-start justify-between mb-4">
-                    {/* Icon circle */}
-                    <div className="flex h-12 w-12 items-center justify-center rounded-[15px] text-[22px] shrink-0"
+                  {/* Icon + status row */}
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] text-[26px] shrink-0"
                       style={{
-                        background: `linear-gradient(145deg, ${accent}30 0%, ${accent}18 100%)`,
-                        boxShadow: `inset 0 1.5px 0 ${accent}40, inset 0 -1px 0 rgba(0,0,0,0.15)`,
-                        border: `1px solid ${accent}25`,
+                        background: `linear-gradient(145deg, ${accent}38 0%, ${accent}1C 100%)`,
+                        boxShadow: `inset 0 1.5px 0 ${accent}50, inset 0 -1px 0 rgba(0,0,0,0.2), 0 4px 14px ${accent}20`,
+                        border: `1px solid ${accent}2E`,
                       }}>
                       {device.icon ?? deviceTypeIcon(device.type)}
                     </div>
 
-                    {/* Status pill */}
                     {st && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-[5px] text-[11px] font-semibold"
                         style={{
                           color: st.online ? '#30D158' : '#FF453A',
-                          background: st.online ? 'rgba(48,209,88,0.14)' : 'rgba(255,69,58,0.14)',
-                          border: `1px solid ${st.online ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                          background: st.online ? 'rgba(48,209,88,0.13)' : 'rgba(255,69,58,0.13)',
+                          border: `1px solid ${st.online ? 'rgba(48,209,88,0.22)' : 'rgba(255,69,58,0.22)'}`,
                         }}>
-                        <span className="h-1.5 w-1.5 rounded-full"
+                        <span className="h-[6px] w-[6px] rounded-full"
                           style={{ backgroundColor: st.online ? '#30D158' : '#FF453A',
                             animation: st.online ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
                         {st.online ? (st.latencyMs != null ? `${st.latencyMs}ms` : 'online') : 'offline'}
@@ -2068,20 +2066,20 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
                   </div>
 
                   {/* Name + type */}
-                  <div className="mb-3">
-                    <p className="text-[14px] font-semibold leading-snug text-white/90">{device.name}</p>
-                    <p className="text-[12px] text-white/40 mt-0.5">{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+                  <div className="mb-4">
+                    <p className="text-[15px] font-semibold leading-tight text-white">{device.name}</p>
+                    <p className="text-[12px] text-white/38 mt-1">{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
                   </div>
 
                   {/* Action feedback */}
                   {actionStatus[device.id] && (
-                    <p className={`text-[12px] mb-2 font-medium ${actionStatus[device.id].startsWith('✗') ? 'text-[#FF3B30]' : 'text-[#30D158]'}`}>
+                    <p className={`text-[12px] mb-3 font-medium animate-fade-in ${actionStatus[device.id].startsWith('✗') ? 'text-[#FF453A]' : 'text-[#30D158]'}`}>
                       {actionStatus[device.id]}
                     </p>
                   )}
 
                   {/* Actions */}
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
                       <>
                         <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
@@ -2562,23 +2560,31 @@ function Dashboard({ user, setup, onSignOut }: {
     if (r.ok) setWidgets((prev) => prev.filter((w) => w.id !== id));
   };
 
-  const ALL_NAV = [...visibleNav, { key: 'settings' as Tab, label: 'Einstellungen', icon: <IcGear /> }];
+  const ALL_NAV = [
+    ...visibleNav,
+    { key: 'settings' as Tab, label: 'Einstellungen', icon: <IcGear size={15} />, color: '#8E8E93' },
+  ];
 
   return (
     <div className="min-h-screen flex animate-fade-in"
       style={{
-        background: 'radial-gradient(ellipse 160% 100% at 50% -20%, #0d0d1a 0%, #000000 50%)',
+        background: '#000000',
         '--accent-ring': `${accent}45`,
         '--accent-color': accent,
       } as React.CSSProperties}>
 
-      {/* Ambient accent glow top-left */}
-      <div style={{
-        position: 'fixed', top: '-5%', left: '-5%', width: '40%', height: '40%',
-        pointerEvents: 'none', zIndex: 0,
-        background: `radial-gradient(ellipse at top left, ${accent}15 0%, transparent 60%)`,
-        filter: 'blur(40px)',
-      }} />
+      {/* ── Mesh background orbs ────────────────────── */}
+      <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
+        {/* Top-left accent glow */}
+        <div style={{ position:'absolute', top:'-15%', left:'-10%', width:'55%', height:'55%',
+          background:`radial-gradient(ellipse, ${accent}22 0%, transparent 65%)`, filter:'blur(70px)' }} />
+        {/* Top-right purple glow */}
+        <div style={{ position:'absolute', top:'-5%', right:'-10%', width:'45%', height:'45%',
+          background:'radial-gradient(ellipse, #5856D61C 0%, transparent 65%)', filter:'blur(60px)' }} />
+        {/* Bottom center violet */}
+        <div style={{ position:'absolute', bottom:'-10%', left:'25%', width:'50%', height:'40%',
+          background:'radial-gradient(ellipse, #AF52DE10 0%, transparent 65%)', filter:'blur(80px)' }} />
+      </div>
 
       {/* ── Sidebar — Apple TV style ─────────────────── */}
       <aside className="glass-dark flex w-[232px] shrink-0 flex-col rounded-[24px] m-3 relative z-10 animate-slide-left">
@@ -2598,27 +2604,33 @@ function Dashboard({ user, setup, onSignOut }: {
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col gap-[2px] px-3 pb-2">
+        <nav className="flex flex-1 flex-col gap-0.5 px-3 pb-2">
           {ALL_NAV.map((item, i) => {
             const active = tab === item.key;
             return (
               <button key={item.key} onClick={() => goTab(item.key)}
-                className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-[10px] text-left text-[14px] font-medium
-                  transition-all duration-200 animate-slide-left delay-${i}`}
+                className={`flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left text-[14px] font-[450]
+                  transition-all duration-200 animate-slide-left delay-${i} active:scale-[0.98]`}
                 style={active ? {
-                  color: accent,
-                  background: `${accent}18`,
-                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 4px rgba(0,0,0,0.2)`,
+                  background: 'rgba(255,255,255,0.09)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 6px rgba(0,0,0,0.25)',
                 } : {
-                  color: 'rgba(255,255,255,0.55)',
+                  background: 'transparent',
                 }}>
-                <span className="flex-shrink-0" style={{ color: active ? accent : 'rgba(255,255,255,0.45)' }}>
+                {/* Colored icon badge */}
+                <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white transition-all duration-200"
+                  style={{
+                    background: active
+                      ? `linear-gradient(145deg, ${item.color}EE, ${item.color}BB)`
+                      : 'rgba(255,255,255,0.07)',
+                    boxShadow: active
+                      ? `0 2px 8px ${item.color}55, inset 0 1px 0 rgba(255,255,255,0.25)`
+                      : 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                    opacity: active ? 1 : 0.65,
+                  }}>
                   {item.icon}
-                </span>
-                <span style={{ color: active ? accent : 'rgba(255,255,255,0.8)' }}>{item.label}</span>
-                {active && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                )}
+                </div>
+                <span style={{ color: active ? '#FFFFFF' : 'rgba(255,255,255,0.65)' }}>{item.label}</span>
               </button>
             );
           })}
@@ -2659,11 +2671,13 @@ function Dashboard({ user, setup, onSignOut }: {
       </aside>
 
       {/* ── Content ──────────────────────────────────── */}
-      <main className="glass-dark min-w-0 flex-1 rounded-[24px] m-3 ml-0 p-6 md:p-7 relative z-10 overflow-y-auto"
+      <main className="glass-dark min-w-0 flex-1 rounded-[24px] m-3 ml-0 p-6 md:p-8 relative z-10 overflow-y-auto"
         style={{ maxHeight: 'calc(100vh - 1.5rem)' }}>
 
+        <div key={tab} className="animate-tab-in h-full">
+
           {tab === 'home' && (
-            <div className="animate-slide-right space-y-5">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Übersicht</h1>
@@ -2733,6 +2747,8 @@ function Dashboard({ user, setup, onSignOut }: {
           {tab === 'admin' && canAdmin && (
             <AdminTab t={t} accent={accent} />
           )}
+
+        </div>{/* end key={tab} wrapper */}
         </main>
     </div>
   );
