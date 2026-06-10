@@ -512,6 +512,8 @@ app.post('/api/setup/root/verify-registration', async (req, res) => {
       requireUserVerification,
     });
   } catch (error) {
+    user.currentChallenge = undefined;
+    void persistState();
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
     user.currentChallenge = undefined;
     return res.status(400).json({ error: message });
@@ -519,6 +521,7 @@ app.post('/api/setup/root/verify-registration', async (req, res) => {
 
   if (!verification.verified || !verification.registrationInfo) {
     user.currentChallenge = undefined;
+    void persistState();
     return res.status(400).json({ verified: false });
   }
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
@@ -585,6 +588,8 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
       requireUserVerification,
     });
   } catch (error) {
+    user.currentChallenge = undefined;
+    void persistState();
     const message = error instanceof Error ? error.message : 'Unknown registration verification error';
     console.error('verify-registration failed', { message });
     user.currentChallenge = undefined;
@@ -593,6 +598,7 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
 
   if (!verification.verified || !verification.registrationInfo) {
     user.currentChallenge = undefined;
+    void persistState();
     return res.status(400).json({ verified: false });
   }
 
@@ -677,6 +683,8 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
       requireUserVerification,
     } as any);
   } catch (error) {
+    user.currentChallenge = undefined;
+    void persistState();
     const message = error instanceof Error ? error.message : 'Unknown verification error';
     const normalized = message.toLowerCase();
     const hint = normalized.includes('user verification was required')

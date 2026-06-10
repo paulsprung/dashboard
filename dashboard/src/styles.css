@@ -4,12 +4,20 @@
 
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  text-rendering: optimizeLegibility;
 }
 
-/* ── Animations ─────────────────────────────────────────── */
+/* ── Spring physics animations ───────────────────────────────── */
+
+@keyframes springIn {
+  0%   { opacity: 0; transform: scale(0.94) translateY(10px); }
+  60%  { transform: scale(1.015) translateY(-1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -17,18 +25,23 @@
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0)    scale(1); }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(24px); }
+  from { opacity: 0; transform: translateX(18px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-24px); }
+  from { opacity: 0; transform: translateX(-18px); }
   to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 @keyframes spin {
@@ -37,8 +50,8 @@
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-5px); }
-  40%, 80% { transform: translateX(5px); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
 }
 
 @keyframes drawCheck {
@@ -47,38 +60,125 @@
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.88); }
   to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  50%       { opacity: 0.35; }
 }
 
-.animate-fade-in     { animation: fadeIn      0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-slide-up    { animation: slideUp     0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-slide-right { animation: slideInRight 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-slide-left  { animation: slideInLeft  0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-scale-in    { animation: scaleIn     0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.04); }
+}
+
+@keyframes statusPulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%       { box-shadow: 0 0 0 4px transparent; opacity: 0.7; }
+}
+
+@keyframes tabIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.animate-spring-in   { animation: springIn    0.54s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-tab-in      { animation: tabIn      0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-float-in    { animation: floatIn     0.52s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fade-in     { animation: fadeIn      0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-up    { animation: slideUp     0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-right { animation: slideInRight 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-left  { animation: slideInLeft  0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-scale-in    { animation: scaleIn     0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-spin        { animation: spin        0.75s linear infinite; }
-.animate-shake       { animation: shake       0.38s ease-out; }
-.animate-pulse-slow  { animation: pulse       2s ease-in-out infinite; }
+.animate-shake       { animation: shake       0.36s ease-out; }
+.animate-pulse-slow  { animation: pulse       2.4s ease-in-out infinite; }
+.animate-breathe     { animation: breathe     3s ease-in-out infinite; }
+
+/* Stagger delays for lists */
+.delay-0  { animation-delay: 0ms; }
+.delay-1  { animation-delay: 50ms; }
+.delay-2  { animation-delay: 100ms; }
+.delay-3  { animation-delay: 150ms; }
+.delay-4  { animation-delay: 200ms; }
+.delay-5  { animation-delay: 250ms; }
+.delay-6  { animation-delay: 300ms; }
 
 .draw-check {
   stroke-dasharray: 40;
   stroke-dashoffset: 40;
-  animation: drawCheck 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+  animation: drawCheck 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.18s forwards;
 }
 
-/* ── Focus ring via accent CSS var ─────────────────────── */
+/* ── Focus ring ──────────────────────────────────────────────── */
 .focus-accent:focus {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  box-shadow: 0 0 0 3px var(--accent-ring, rgba(0,122,255,0.4));
 }
 
-/* ── Scrollbar ──────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.4); }
+
+/* ── iOS 26 Liquid Glass ─────────────────────────────────────── */
+
+/* Full liquid glass — for login cards, modals */
+.glass-card {
+  background: linear-gradient(160deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.055) 60%, rgba(255,255,255,0.09) 100%);
+  backdrop-filter: blur(60px) saturate(220%) brightness(1.08);
+  -webkit-backdrop-filter: blur(60px) saturate(220%) brightness(1.08);
+  border: 1px solid rgba(255,255,255,0.22);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.32),
+    inset 0 -1px 0 rgba(0,0,0,0.15),
+    inset 1px 0 0 rgba(255,255,255,0.12),
+    inset -1px 0 0 rgba(255,255,255,0.08),
+    0 24px 80px rgba(0,0,0,0.55),
+    0 4px 16px rgba(0,0,0,0.3);
+}
+
+/* Dark glass — sidebar, panels */
+.glass-dark {
+  background: rgba(20,20,22,0.85);
+  backdrop-filter: blur(44px) saturate(180%);
+  -webkit-backdrop-filter: blur(44px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.13),
+    inset 0 -1px 0 rgba(0,0,0,0.25),
+    0 8px 40px rgba(0,0,0,0.5);
+}
+
+/* Subtle glass — device cards, list items */
+.glass-subtle {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.14),
+    0 2px 12px rgba(0,0,0,0.25);
+}
+
+/* Active nav pill */
+.glass-pill {
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.22),
+    0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+
+/* ── Smooth transitions ──────────────────────────────────────── */
+* { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+button { -webkit-tap-highlight-color: transparent; }

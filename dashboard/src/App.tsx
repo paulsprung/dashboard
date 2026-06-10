@@ -102,58 +102,127 @@ const APPLE_COLORS = [
 function tok(theme: ThemeMode) {
   const t = {
     light: {
-      page:       'bg-[#F2F2F7] text-[#1D1D1F]',
-      card:       'bg-white/90',
-      border:     'border-black/[0.07]',
-      text:       'text-[#1D1D1F]',
-      muted:      'text-[#6E6E73]',
-      inputBg:    'bg-[#F2F2F7]',
-      inputText:  'text-[#1D1D1F] placeholder:text-[#C7C7CC]',
-      inputBorder:'border border-black/[0.1]',
-      divider:    'border-black/[0.06]',
-      navHover:   'hover:bg-black/[0.04]',
-      navActive:  'bg-black/[0.06] font-medium',
-      userCard:   'bg-black/[0.04]',
-      shadow:     '0 2px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.06)',
+      page:        'bg-[#F2F2F7]',
+      card:        'bg-white/88',
+      cardSolid:   'bg-white',
+      border:      'border-black/[0.06]',
+      text:        'text-[#1D1D1F]',
+      label:       'text-[#3C3C43]',
+      muted:       'text-[#8E8E93]',
+      inputBg:     'bg-[#F2F2F7]',
+      inputText:   'text-[#1D1D1F] placeholder:text-[#C7C7CC]',
+      inputBorder: '',
+      divider:     'border-black/[0.055]',
+      navHover:    'hover:bg-black/[0.042] active:bg-black/[0.07]',
+      navActive:   'font-semibold',
+      userCard:    'bg-black/[0.04]',
+      shadow:      '0 4px 24px rgba(0,0,0,0.09), 0 1px 3px rgba(0,0,0,0.05)',
+      shadowSm:    '0 2px 10px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
+      shadowLg:    '0 20px 60px rgba(0,0,0,0.13), 0 6px 16px rgba(0,0,0,0.06)',
     },
     dark: {
-      page:       'bg-[#1C1C1E] text-[#F5F5F7]',
-      card:       'bg-[#2C2C2E]/95',
-      border:     'border-white/[0.08]',
-      text:       'text-[#F5F5F7]',
-      muted:      'text-[#98989F]',
-      inputBg:    'bg-[#3A3A3C]',
-      inputText:  'text-[#F5F5F7] placeholder:text-[#636366]',
-      inputBorder:'border border-transparent',
-      divider:    'border-white/[0.08]',
-      navHover:   'hover:bg-white/[0.06]',
-      navActive:  'bg-white/[0.1] font-medium',
-      userCard:   'bg-white/[0.05]',
-      shadow:     '0 2px 16px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.25)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.2)',
+      page:        'bg-black',
+      card:        'bg-[#1C1C1E]/88',
+      cardSolid:   'bg-[#1C1C1E]',
+      border:      'border-white/[0.1]',
+      text:        'text-[#F5F5F7]',
+      label:       'text-[#EBEBF5CC]',
+      muted:       'text-[#98989F]',
+      inputBg:     'bg-[#2C2C2E]',
+      inputText:   'text-[#F5F5F7] placeholder:text-[#48484A]',
+      inputBorder: '',
+      divider:     'border-white/[0.07]',
+      navHover:    'hover:bg-white/[0.06] active:bg-white/[0.1]',
+      navActive:   'font-semibold',
+      userCard:    'bg-white/[0.05]',
+      shadow:      '0 4px 28px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)',
+      shadowSm:    '0 2px 14px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.22)',
+      shadowLg:    '0 24px 80px rgba(0,0,0,0.75), 0 8px 24px rgba(0,0,0,0.45)',
     },
     'ultra-dark': {
-      page:       'bg-black text-[#F5F5F7]',
-      card:       'bg-[#111111]',
-      border:     'border-white/[0.07]',
-      text:       'text-[#F5F5F7]',
-      muted:      'text-[#6E6E73]',
-      inputBg:    'bg-[#1C1C1E]',
-      inputText:  'text-[#F5F5F7] placeholder:text-[#48484A]',
-      inputBorder:'border border-white/[0.06]',
-      divider:    'border-white/[0.06]',
-      navHover:   'hover:bg-white/[0.06]',
-      navActive:  'bg-white/[0.1] font-medium',
-      userCard:   'bg-white/[0.04]',
-      shadow:     '0 2px 20px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.5)',
-      shadowSm:   '0 1px 4px rgba(0,0,0,0.4)',
+      page:        'bg-[#050505]',
+      card:        'bg-[#111111]/92',
+      cardSolid:   'bg-[#111111]',
+      border:      'border-white/[0.07]',
+      text:        'text-[#F5F5F7]',
+      label:       'text-[#EBEBF5B3]',
+      muted:       'text-[#6E6E73]',
+      inputBg:     'bg-[#1C1C1E]',
+      inputText:   'text-[#F5F5F7] placeholder:text-[#3A3A3C]',
+      inputBorder: '',
+      divider:     'border-white/[0.06]',
+      navHover:    'hover:bg-white/[0.05] active:bg-white/[0.08]',
+      navActive:   'font-semibold',
+      userCard:    'bg-white/[0.04]',
+      shadow:      '0 4px 32px rgba(0,0,0,0.75), 0 1px 4px rgba(0,0,0,0.5)',
+      shadowSm:    '0 2px 16px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.42)',
+      shadowLg:    '0 28px 100px rgba(0,0,0,0.92), 0 10px 32px rgba(0,0,0,0.65)',
     },
   } as const;
   return t[theme];
 }
 
 // ── Small UI helpers ──────────────────────────────────────────────────────────
+
+// ── SF Symbol-inspired icons ──────────────────────────────────
+
+function IcHome({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <path d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v7a1 1 0 0 1-1 1h-3.5a1 1 0 0 1-1-1v-3.5h-3V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7H2a1 1 0 0 1-.707-1.707l8-8z"/>
+    </svg>
+  );
+}
+
+function IcGrid({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+      <rect x="11" y="2" width="7" height="7" rx="1.5"/>
+      <rect x="2" y="11" width="7" height="7" rx="1.5"/>
+      <rect x="11" y="11" width="7" height="7" rx="1.5"/>
+    </svg>
+  );
+}
+
+function IcRadar({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="10" cy="10" r="8"/>
+      <circle cx="10" cy="10" r="4.5"/>
+      <circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+      <line x1="10" y1="2" x2="10" y2="5.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IcPerson({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="10" cy="6.5" r="3.5"/>
+      <path d="M2.5 18c0-3.866 3.358-7 7.5-7s7.5 3.134 7.5 7H2.5z"/>
+    </svg>
+  );
+}
+
+function IcGear({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" clipRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 0 1-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 0 1 .947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 0 1 2.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 0 1 2.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 0 1 .947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 0 1-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 0 1-2.287-.947zM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+    </svg>
+  );
+}
+
+function FaceIDIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+      <path d="M7 3H4a1 1 0 0 0-1 1v3M17 3h3a1 1 0 0 1 1 1v3M7 21H4a1 1 0 0 1-1-1v-3M17 21h3a1 1 0 0 0 1-1v-3"/>
+      <path d="M9 9v1M15 9v1"/>
+      <path d="M9.5 15.5a3.5 3.5 0 0 0 5 0"/>
+      <path d="M12 9v3.5"/>
+    </svg>
+  );
+}
 
 function Spinner({ size = 18, color = 'currentColor' }: { size?: number; color?: string }) {
   return (
@@ -177,21 +246,6 @@ function SuccessCheck({ color }: { color: string }) {
   );
 }
 
-function FaceIDIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 8V6a2 2 0 0 1 2-2h2" />
-      <path d="M2 16v2a2 2 0 0 0 2 2h2" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v2" />
-      <path d="M16 20h2a2 2 0 0 0 2-2v-2" />
-      <path d="M9 10h.01" />
-      <path d="M15 10h.01" />
-      <path d="M9.5 15a3.5 3.5 0 0 0 5 0" />
-    </svg>
-  );
-}
-
 function Btn({
   children, onClick, loading = false, disabled = false,
   variant = 'primary', accent, className = '', size = 'md',
@@ -200,32 +254,40 @@ function Btn({
   disabled?: boolean; variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   accent: string; className?: string; size?: 'sm' | 'md';
 }) {
-  const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
-  const base = `inline-flex items-center justify-center gap-2 rounded-xl ${pad} font-medium transition-all duration-150 hover:brightness-105 active:scale-[0.97] active:brightness-95 disabled:opacity-40 select-none cursor-pointer`;
+  const pad = size === 'sm' ? 'px-3.5 py-[7px] text-[13px]' : 'px-4 py-[10px] text-[14px]';
+  const base = `inline-flex items-center justify-center gap-2 font-medium select-none cursor-pointer
+    transition-all duration-150 ease-out
+    active:scale-[0.95] disabled:opacity-35 disabled:pointer-events-none
+    ${size === 'sm' ? 'rounded-[10px]' : 'rounded-[13px]'} ${pad}`;
   if (variant === 'primary') return (
     <button onClick={onClick} disabled={disabled || loading}
       className={`${base} text-white ${className}`}
-      style={{ backgroundColor: accent, boxShadow: `0 2px 8px ${accent}55` }}>
-      {loading ? <Spinner size={16} color="white" /> : children}
+      style={{ backgroundColor: accent, boxShadow: `0 2px 10px ${accent}60, 0 1px 2px ${accent}30` }}>
+      {loading ? <Spinner size={15} color="white" /> : children}
     </button>
   );
   if (variant === 'danger') return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-white bg-red-500 ${className}`}
-      style={{ boxShadow: '0 2px 8px rgba(239,68,68,0.35)' }}>
-      {loading ? <Spinner size={16} color="white" /> : children}
+      className={`${base} text-white bg-[#FF3B30] ${className}`}
+      style={{ boxShadow: '0 2px 8px rgba(255,59,48,0.4)' }}>
+      {loading ? <Spinner size={15} color="white" /> : children}
     </button>
   );
   if (variant === 'secondary') return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-[#F5F5F7] bg-white/10 border border-white/[0.1] ${className}`}>
-      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
+      className={`${base} border ${className}`}
+      style={{
+        color: accent,
+        borderColor: `${accent}30`,
+        backgroundColor: `${accent}0F`,
+      }}>
+      {loading ? <Spinner size={15} color={accent} /> : children}
     </button>
   );
   return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`${base} text-[#F5F5F7] opacity-50 hover:opacity-90 ${className}`}>
-      {loading ? <Spinner size={16} color="#F5F5F7" /> : children}
+      className={`${base} bg-white/[0.07] border border-white/[0.1] text-[#F5F5F7]/70 hover:text-[#F5F5F7] hover:bg-white/[0.1] ${className}`}>
+      {loading ? <Spinner size={15} color="currentColor" /> : children}
     </button>
   );
 }
@@ -242,15 +304,17 @@ function Input({
   useEffect(() => { if (autoFocus) setTimeout(() => ref.current?.focus(), 80); }, [autoFocus]);
   return (
     <div className="space-y-1.5">
-      {label && <label className={`block text-sm font-medium ${t.muted}`}>{label}</label>}
+      {label && (
+        <label className={`block text-[13px] font-medium ${t.muted}`}>{label}</label>
+      )}
       <input
         ref={ref}
         type={type} value={value} placeholder={placeholder}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className={`focus-accent w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-all
-          ${t.inputBg} ${t.inputText} ${t.inputBorder} disabled:opacity-50`}
-        style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+        className={`focus-accent w-full rounded-[12px] px-4 py-3 text-[15px] leading-snug outline-none transition-all
+          ${t.inputBg} ${t.inputText} disabled:opacity-50`}
+        style={{ '--accent-ring': `${accent}45` } as React.CSSProperties}
       />
       {hint && <p className={`text-xs ${t.muted}`}>{hint}</p>}
     </div>
@@ -1324,206 +1388,200 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
     setTimeout(onDone, 1800);
   });
 
-  const stepLabels = ['E-Mail', 'Passkey', 'Backup', 'Design'];
+  const steps = ['E-Mail', 'Passkey', 'Backup', 'Design'];
 
   return (
-    <div
-      className={`relative min-h-screen ${t.page} flex items-center justify-center p-6 overflow-hidden`}>
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute left-1/2 -top-60 h-[600px] w-[900px] -translate-x-1/2 rounded-full blur-3xl"
-          style={{ background: accent, opacity: 0.12 }} />
-      </div>
-
-      <div className="relative w-full max-w-md animate-fade-in">
-        {/* Logo + header */}
-        <div className="mb-8 text-center animate-slide-up">
-          <div className="mx-auto mb-5 h-16 w-16 overflow-hidden rounded-[22px]"
-            style={{ boxShadow: `0 8px 40px ${accent}60, 0 2px 8px rgba(0,0,0,0.5)` }}>
-            <img src="/logo.svg" alt="Logo" className="h-full w-full" />
-          </div>
-          <h1 className={`text-[28px] font-semibold tracking-tight ${t.text}`}>Dashboard einrichten</h1>
-          <p className={`mt-1.5 text-sm ${t.muted}`}>{stepLabels[Math.min(step, 4) - 1] ?? ''}</p>
+    <div className={`min-h-screen ${t.page} flex flex-col items-center justify-center p-6 animate-fade-in`}>
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center animate-slide-up">
+          <img src="/logo.svg" alt="Logo" className="mx-auto mb-4 h-12 w-12 rounded-2xl" style={{ boxShadow: `0 4px 16px ${accent}44` }} />
+          <h1 className={`text-2xl font-semibold tracking-tight ${t.text}`}>Dashboard einrichten</h1>
+          <p className={`mt-1 text-sm ${t.muted}`}>Schritt {Math.min(step, 4)} von 4</p>
         </div>
 
-        {/* Step dots */}
-        <div className="mb-6 flex items-center justify-center gap-2">
-          {stepLabels.map((_, i) => {
+        <div className={`h-1 w-full rounded-full overflow-hidden ${t.inputBg}`}>
+          <div className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${(Math.min(step, 4) / 4) * 100}%`, backgroundColor: accent }} />
+        </div>
+
+        <div className="flex justify-between">
+          {steps.map((label, i) => {
             const s = i + 1;
             const active = step === s;
             const done_ = step > s;
             return (
-              <div key={s}
-                className="rounded-full transition-all duration-300"
-                style={{
-                  width: active ? 24 : 8,
-                  height: 8,
-                  backgroundColor: done_ || active ? accent : `${accent}30`,
-                }} />
+              <div key={s} className="flex flex-col items-center gap-1">
+                <div className={`h-6 w-6 rounded-full text-xs flex items-center justify-center font-medium transition-all ${
+                  done_ ? 'text-white' : active ? 'text-white' : `${t.muted} ${t.inputBg}`
+                }`} style={done_ || active ? { backgroundColor: accent } : {}}>
+                  {done_ ? '✓' : s}
+                </div>
+                <span className={`text-[10px] ${active ? t.text : t.muted}`}>{label}</span>
+              </div>
             );
           })}
         </div>
 
-        {/* Card */}
-        <div key={animKey}
-          className={`rounded-3xl border backdrop-blur-2xl p-8 animate-slide-up ${t.card}`}
-          style={{
-            borderColor: `${accent}20`,
-            boxShadow: `0 32px 80px rgba(0,0,0,0.45), inset 0 1px 0 ${accent}25`,
-          }}>
-          {done ? (
-            <div className="flex flex-col items-center gap-5 py-4">
-              <SuccessCheck color={accent} />
-              <div className="text-center">
-                <p className={`font-semibold ${t.text}`}>Einrichtung abgeschlossen</p>
-                <p className={`mt-1.5 text-sm ${t.muted}`}>Du wirst weitergeleitet…</p>
+        <div key={animKey} className="animate-slide-up">
+          <Card t={t} accent={accent} className="p-7">
+            {done ? (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <SuccessCheck color={accent} />
+                <div className="text-center">
+                  <p className={`font-semibold ${t.text}`}>Einrichtung abgeschlossen</p>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Du wirst weitergeleitet…</p>
+                </div>
               </div>
-            </div>
-          ) : step === 1 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className={`text-lg font-semibold ${t.text}`}>Root-Konto anlegen</h2>
-                <p className={`mt-1 text-sm ${t.muted}`}>Deine E-Mail-Adresse wird als Administrator-Konto verwendet.</p>
-              </div>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="du@beispiel.de"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && startSetup()}
-                className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
-                  ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
-                style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
-              />
-              <StatusMsg msg={status} t={t} />
-              <Btn accent={accent} className="w-full" onClick={startSetup} loading={loading}
-                disabled={!email.includes('@')}>Weiter</Btn>
-            </div>
-          ) : step === 2 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
-                <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel. Keine Passwörter nötig.</p>
-              </div>
-              <button onClick={() => go(1)}
-                className={`flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
-                <span className="text-base">📧</span>
+            ) : step === 1 ? (
+              <div className="space-y-5">
                 <div>
-                  <p className={`text-sm font-medium ${t.text}`}>{email}</p>
-                  <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Root-Konto anlegen</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deine E-Mail-Adresse ein. Sie wird als Administrator-Konto verwendet.</p>
                 </div>
-              </button>
-              <StatusMsg msg={status} t={t} />
-              <button
-                onClick={registerPasskey}
-                disabled={loading}
-                className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
-                style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
-                {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Passkey erstellen</>}
-              </button>
-            </div>
-          ) : step === 3 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
-                <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
+                <Input label="E-Mail" value={email} onChange={setEmail}
+                  placeholder="du@beispiel.de" type="email" t={t} accent={accent} autoFocus />
+                <StatusMsg msg={status} t={t} />
+                <Btn accent={accent} className="w-full" onClick={startSetup} loading={loading}
+                  disabled={!email.includes('@')}>Weiter</Btn>
               </div>
-              {backupLoading ? (
-                <div className="flex items-center justify-center py-8"><Spinner size={24} color={accent} /></div>
-              ) : backupPassword ? (
-                <div className="space-y-4">
-                  <div className={`rounded-2xl border p-5 space-y-2 ${t.inputBg} ${t.border}`}>
-                    <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
-                    <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed"
-                      style={{ color: accent }}>{backupPassword}</p>
+            ) : step === 2 ? (
+              <div className="space-y-5">
+                <div>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel. Keine Passwörter nötig.</p>
+                </div>
+                <button onClick={() => go(1)}
+                  className={`flex w-full items-center gap-3 rounded-xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
+                  <span className="text-base">📧</span>
+                  <div>
+                    <p className={`text-sm font-medium ${t.text}`}>{email}</p>
+                    <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
                   </div>
-                  <div className="rounded-2xl p-3.5 text-xs space-y-1" style={{ backgroundColor: `${accent}12` }}>
-                    <p style={{ color: accent }} className="font-medium mb-1">So aufbewahren:</p>
-                    <p className={t.muted}>• Passwortmanager (empfohlen)</p>
-                    <p className={t.muted}>• Sicher ausgedruckt und eingeschlossen</p>
-                    <p className={t.muted}>• Verschlüsseltes Notizdokument</p>
+                </button>
+                <StatusMsg msg={status} t={t} />
+                <Btn accent={accent} className="w-full" onClick={registerPasskey} loading={loading}>
+                  Passkey erstellen
+                </Btn>
+              </div>
+            ) : step === 3 ? (
+              <div className="space-y-5">
+                <div>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
+                </div>
+                {backupLoading ? (
+                  <div className="flex items-center justify-center py-8"><Spinner size={24} color={accent} /></div>
+                ) : backupPassword ? (
+                  <div className="space-y-4">
+                    <div className={`rounded-xl border p-4 space-y-2 ${t.inputBg} ${t.border}`}>
+                      <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
+                      <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed" style={{ color: accent }}>
+                        {backupPassword}
+                      </p>
+                    </div>
+                    <div className={`rounded-xl p-3 text-xs ${t.muted} space-y-1`} style={{ backgroundColor: `${accent}12` }}>
+                      <p style={{ color: accent }} className="font-medium">So aufbewahren:</p>
+                      <p>• Passwortmanager (empfohlen)</p>
+                      <p>• Sicher ausgedruckt und eingeschlossen</p>
+                      <p>• Verschlüsseltes Notizdokument</p>
+                    </div>
+                    <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
+                      Ich habe den Code gesichert
+                    </Btn>
                   </div>
-                  <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
-                    Ich habe den Code gesichert
-                  </Btn>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <StatusMsg msg={status} t={t} />
-                  <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
-                    Erneut versuchen
-                  </Btn>
-                </div>
-              )}
-              {backupPassword && <StatusMsg msg={status} t={t} />}
-            </div>
-          ) : step === 4 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className={`text-lg font-semibold ${t.text}`}>Dashboard anpassen</h2>
-                <p className={`mt-1 text-sm ${t.muted}`}>Gib deinem Dashboard einen Namen und wähle das Erscheinungsbild.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <StatusMsg msg={status} t={t} />
+                    <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
+                      Erneut versuchen
+                    </Btn>
+                  </div>
+                )}
+                {backupPassword && <StatusMsg msg={status} t={t} />}
               </div>
-              <Input label="Dashboard-Name" value={dashboardName} onChange={setDashboardName}
-                placeholder="Mein Dashboard" t={t} accent={accent} />
-              <div className="space-y-1.5">
-                <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
-                    <button key={m} onClick={() => setTheme(m)}
-                      className={`rounded-2xl border px-3 py-2.5 text-xs font-medium transition-all ${
-                        theme === m ? '' : `${t.border} opacity-40 hover:opacity-70`
-                      }`}
-                      style={theme === m ? { borderColor: accent, color: accent } : {}}>
-                      {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
-                    </button>
-                  ))}
+            ) : step === 4 ? (
+              <div className="space-y-5">
+                <div>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Dashboard anpassen</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deinem Dashboard einen Namen und wähle das Erscheinungsbild.</p>
                 </div>
+                <Input label="Dashboard-Name" value={dashboardName} onChange={setDashboardName}
+                  placeholder="Mein Dashboard" t={t} accent={accent} />
+                <div className="space-y-1.5">
+                  <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
+                      <button key={m} onClick={() => setTheme(m)}
+                        className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+                          theme === m ? '' : `${t.border} opacity-40 hover:opacity-70`
+                        }`}
+                        style={theme === m ? { borderColor: accent, color: accent } : {}}>
+                        {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
+                  <ColorPicker value={accent} onChange={setAccent} t={t} />
+                </div>
+                <StatusMsg msg={status} t={t} />
+                <Btn accent={accent} className="w-full" onClick={finish} loading={loading}>
+                  Einrichtung abschließen
+                </Btn>
               </div>
-              <div className="space-y-1.5">
-                <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
-                <ColorPicker value={accent} onChange={setAccent} t={t} />
-              </div>
-              <StatusMsg msg={status} t={t} />
-              <Btn accent={accent} className="w-full" onClick={finish} loading={loading}>
-                Einrichtung abschließen
-              </Btn>
-            </div>
-          ) : null}
+            ) : null}
+          </Card>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Auth pages ───────────────────────────────────────────────────────────────
+// ── Auth pages ───────────────────────────────────────────────
 
 function AuthPage({ title, sub, children, accent, t }: {
   title: string; sub: string; children: React.ReactNode;
   accent: string; t: ReturnType<typeof tok>;
 }) {
   return (
-    <div className={`relative min-h-screen ${t.page} flex items-center justify-center p-6 overflow-hidden`}>
-      {/* Ambient glow behind header */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute left-1/2 -top-60 h-[600px] w-[900px] -translate-x-1/2 rounded-full blur-3xl"
-          style={{ background: accent, opacity: 0.12 }} />
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      style={{
+        background: 'radial-gradient(ellipse 120% 80% at 50% -10%, #12122a 0%, #000000 55%)',
+        '--accent-ring': `${accent}45`,
+      } as React.CSSProperties}>
+
+      {/* Deep ambient glow — top */}
+      <div style={{
+        position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '70%', height: '50%', pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at top, ${accent}28 0%, transparent 65%)`,
+        filter: 'blur(20px)',
+      }} />
+      {/* Subtle bottom reflection */}
+      <div style={{
+        position: 'fixed', bottom: '-10%', left: '50%', transform: 'translateX(-50%)',
+        width: '50%', height: '30%', pointerEvents: 'none', zIndex: 0,
+        background: `radial-gradient(ellipse at center, ${accent}0F 0%, transparent 70%)`,
+        filter: 'blur(30px)',
+      }} />
+
+      {/* Logo badge */}
+      <div className="relative z-10 mb-7 flex flex-col items-center animate-spring-in">
+        <div className="mb-5 flex items-center justify-center w-[80px] h-[80px] rounded-[26px]"
+          style={{
+            background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}BB 100%)`,
+            boxShadow: `0 12px 40px ${accent}60, 0 4px 12px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.2)`,
+          }}>
+          <img src="/logo.svg" alt="Logo" className="w-[46px] h-[46px]" />
+        </div>
+        <h1 className="text-[30px] font-semibold tracking-[-0.6px] text-white">{title}</h1>
+        <p className="mt-1.5 text-[15px] text-white/50">{sub}</p>
       </div>
 
-      <div className="relative w-full max-w-[380px] animate-fade-in">
-        {/* Logo + title — outside the card */}
-        <div className="mb-8 text-center animate-slide-up">
-          <div className="mx-auto mb-5 h-16 w-16 overflow-hidden rounded-[22px]"
-            style={{ boxShadow: `0 8px 40px ${accent}60, 0 2px 8px rgba(0,0,0,0.5)` }}>
-            <img src="/logo.svg" alt="" className="h-full w-full" />
-          </div>
-          <h1 className={`text-[28px] font-semibold tracking-tight ${t.text}`}>{title}</h1>
-          <p className={`mt-1.5 text-sm ${t.muted}`}>{sub}</p>
-        </div>
-
-        {/* Card */}
-        <div className={`rounded-3xl border backdrop-blur-2xl p-8 animate-slide-up ${t.card}`}
-          style={{
-            borderColor: `${accent}20`,
-            boxShadow: `0 32px 80px rgba(0,0,0,0.45), inset 0 1px 0 ${accent}25`,
-          }}>
+      {/* Liquid glass card */}
+      <div className="relative z-10 w-full max-w-[360px] animate-spring-in delay-2">
+        <div className="glass-card rounded-[28px] px-7 py-7">
           {children}
         </div>
       </div>
@@ -1559,26 +1617,37 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
 
   return (
     <AuthPage title={setup.dashboardName} sub="Melde dich mit deinem Passkey an" accent={accent} t={t}>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <input
-          type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder="E-Mail-Adresse"
-          autoFocus
+          type="email" value={email} autoFocus
+          onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
-          className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
-            ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
-          style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
+          placeholder="E-Mail Adresse"
+          className="focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all text-white placeholder-white/30"
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            '--accent-ring': `${accent}50`,
+          } as React.CSSProperties}
         />
         <StatusMsg msg={status} t={t} />
         <button
           onClick={signIn}
-          disabled={loading || !email.includes('@')}
-          className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
-          style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
-          {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Mit Passkey anmelden</>}
+          disabled={!email.includes('@') || loading}
+          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-35"
+          style={{
+            background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}CC 100%)`,
+            boxShadow: `0 4px 24px ${accent}60, 0 1px 4px ${accent}40, inset 0 1px 0 rgba(255,255,255,0.25)`,
+          }}>
+          {loading ? <Spinner size={18} color="white" /> : (
+            <>
+              <FaceIDIcon size={20} />
+              Mit Passkey anmelden
+            </>
+          )}
         </button>
-        <p className={`text-center text-xs ${t.muted} opacity-60`}>
-          Kein Passwort nötig — dein Gerät authentifiziert dich
+        <p className="text-center text-[12px] pt-1 text-white/35">
+          Touch ID · Face ID · Sicherheitsschlüssel
         </p>
       </div>
     </AuthPage>
@@ -1619,33 +1688,24 @@ function InvitePage({ setup, inviteToken, initEmail }: {
   return (
     <AuthPage title="Einladung annehmen" sub="Erstelle deinen Passkey für das Dashboard" accent={accent} t={t}>
       {done ? (
-        <div className="flex flex-col items-center gap-5 py-4">
+        <div className="flex flex-col items-center gap-4 py-2">
           <SuccessCheck color={accent} />
           <div className="text-center">
             <p className={`font-semibold ${t.text}`}>Passkey erstellt</p>
-            <p className={`mt-1.5 text-sm ${t.muted}`}>Lade die Seite neu, um dich anzumelden.</p>
+            <p className={`mt-1 text-[13px] ${t.muted}`}>Du kannst dich jetzt anmelden.</p>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          <input
-            type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="E-Mail-Adresse"
-            className={`focus-accent w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all
-              ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
-            style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
-          />
+        <div className="space-y-3">
+          <Input label="E-Mail" value={email} onChange={setEmail} t={t} accent={accent} />
           <StatusMsg msg={status} t={t} />
           <button
             onClick={register}
-            disabled={loading || !email.includes('@')}
-            className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
-            style={{ backgroundColor: accent, boxShadow: `0 4px 24px ${accent}66` }}>
-            {loading ? <Spinner size={18} color="white" /> : <><FaceIDIcon size={18} />Passkey erstellen</>}
+            disabled={!email.includes('@') || loading}
+            className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40"
+            style={{ backgroundColor: accent, boxShadow: `0 4px 20px ${accent}60` }}>
+            {loading ? <Spinner size={18} color="white" /> : 'Passkey erstellen'}
           </button>
-          <p className={`text-center text-xs ${t.muted} opacity-60`}>
-            Kein Passwort nötig — dein Gerät authentifiziert dich
-          </p>
         </div>
       )}
     </AuthPage>
@@ -1658,11 +1718,11 @@ type Tab = 'home' | 'devices' | 'discovery' | 'admin' | 'settings';
 
 const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
 
-const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'home',      label: 'Home',      icon: '⌂' },
-  { key: 'devices',   label: 'Geräte',   icon: '◫' },
-  { key: 'discovery', label: 'Discovery', icon: '◎' },
-  { key: 'admin',     label: 'Admin',     icon: '⚙' },
+const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: 'home',      label: 'Home',      icon: <IcHome size={15} />,   color: '#007AFF' },
+  { key: 'devices',   label: 'Geräte',   icon: <IcGrid size={15} />,   color: '#5856D6' },
+  { key: 'discovery', label: 'Discovery', icon: <IcRadar size={15} />,  color: '#FF9500' },
+  { key: 'admin',     label: 'Admin',     icon: <IcPerson size={15} />, color: '#30D158' },
 ];
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -1943,12 +2003,16 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   if (devices.length === 0) {
     return (
       <div className="animate-slide-right">
-        <h1 className={`text-xl font-semibold ${t.text}`}>Geräte</h1>
-        <p className={`mt-1 text-sm ${t.muted}`}>Verbundene Geräte und Steuerung.</p>
-        <div className={`mt-6 rounded-2xl border p-12 text-center ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
-          <p className="text-4xl mb-3">📱</p>
-          <p className={`font-medium ${t.text}`}>Noch keine Geräte</p>
-          <p className={`mt-1 text-sm ${t.muted}`}>Geräte können in den Einstellungen hinzugefügt werden.</p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Geräte</h1>
+        <p className="mt-1 text-[14px] text-white/45">Verbundene Geräte und Steuerung.</p>
+        <div className="glass-subtle mt-6 rounded-[20px] p-16 text-center"
+          style={{ borderColor: `${accent}20` }}>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] text-white/30"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <IcGrid size={24} />
+          </div>
+          <p className="font-semibold text-white/70">Noch keine Geräte</p>
+          <p className="mt-1 text-[13px] text-white/35">Geräte können in den Einstellungen hinzugefügt werden.</p>
         </div>
       </div>
     );
@@ -1957,87 +2021,104 @@ function DevicesTab({ devices, t, accent, statuses }: { devices: Device[]; t: Re
   const rooms = [...new Set(devices.map((d) => d.room ?? 'Allgemein'))];
 
   return (
-    <div className="animate-slide-right space-y-5">
+    <div className="animate-slide-right space-y-6">
       <div>
-        <h1 className={`text-xl font-semibold ${t.text}`}>Geräte</h1>
-        <p className={`text-sm ${t.muted}`}>{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Geräte</h1>
+        <p className="text-[14px] text-white/45">{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
       </div>
 
       {rooms.map((room) => (
         <div key={room}>
-          <p className={`mb-2 text-xs font-semibold uppercase tracking-widest ${t.muted}`} style={{ color: `${accent}AA` }}>{room}</p>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">{room}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => (
-              <div key={device.id}
-                className={`rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-px ${t.border} ${t.inputBg}`}
-                style={{ ...panelStyle(accent, t), animationDelay: `${i * 40}ms` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className={`font-medium ${t.text}`}>{device.name}</p>
-                      {statuses[device.id] && (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                          statuses[device.id].online
-                            ? 'bg-green-500/15 text-green-500'
-                            : 'bg-red-500/15 text-red-500'
-                        }`}>
-                          <span className={`h-1 w-1 rounded-full ${statuses[device.id].online ? 'bg-green-500' : 'bg-red-500'}`} />
-                          {statuses[device.id].online
-                            ? `${statuses[device.id].latencyMs}ms`
-                            : 'offline'}
-                        </span>
-                      )}
+            {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => {
+              const st = statuses[device.id];
+              return (
+                <div key={device.id}
+                  className={`glass-subtle group rounded-[22px] p-5 transition-all duration-250
+                    hover:-translate-y-[3px] hover:shadow-2xl animate-float-in delay-${Math.min(i, 6)}`}
+                  style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 16px rgba(0,0,0,0.3)' }}>
+
+                  {/* Icon + status row */}
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] text-[26px] shrink-0"
+                      style={{
+                        background: `linear-gradient(145deg, ${accent}38 0%, ${accent}1C 100%)`,
+                        boxShadow: `inset 0 1.5px 0 ${accent}50, inset 0 -1px 0 rgba(0,0,0,0.2), 0 4px 14px ${accent}20`,
+                        border: `1px solid ${accent}2E`,
+                      }}>
+                      {device.icon ?? deviceTypeIcon(device.type)}
                     </div>
-                    <p className={`text-xs ${t.muted}`}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+
+                    {st && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-[5px] text-[11px] font-semibold"
+                        style={{
+                          color: st.online ? '#30D158' : '#FF453A',
+                          background: st.online ? 'rgba(48,209,88,0.13)' : 'rgba(255,69,58,0.13)',
+                          border: `1px solid ${st.online ? 'rgba(48,209,88,0.22)' : 'rgba(255,69,58,0.22)'}`,
+                        }}>
+                        <span className="h-[6px] w-[6px] rounded-full"
+                          style={{ backgroundColor: st.online ? '#30D158' : '#FF453A',
+                            animation: st.online ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
+                        {st.online ? (st.latencyMs != null ? `${st.latencyMs}ms` : 'online') : 'offline'}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-2xl">{device.icon ?? deviceTypeIcon(device.type)}</span>
-                </div>
 
-                {actionStatus[device.id] && (
-                  <p className={`text-xs mb-2 ${actionStatus[device.id].startsWith('✗') ? 'text-red-500' : 'text-green-500'}`}>
-                    {actionStatus[device.id]}
-                  </p>
-                )}
+                  {/* Name + type */}
+                  <div className="mb-4">
+                    <p className="text-[15px] font-semibold leading-tight text-white">{device.name}</p>
+                    <p className="text-[12px] text-white/38 mt-1">{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+                  </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                      <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
-                    </>
+                  {/* Action feedback */}
+                  {actionStatus[device.id] && (
+                    <p className={`text-[12px] mb-3 font-medium animate-fade-in ${actionStatus[device.id].startsWith('✗') ? 'text-[#FF453A]' : 'text-[#30D158]'}`}>
+                      {actionStatus[device.id]}
+                    </p>
                   )}
-                  {device.type === 'wol' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
-                  )}
-                  {device.type === 'proxmox' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
-                  )}
-                  {(device.type === 'rdp' || device.type === 'ssh') && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
-                  )}
-                  {device.type === 'http' && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                    </>
-                  )}
-                  {device.type === 'tasmota' && (
-                    <>
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                      <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                      <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
-                    </>
-                  )}
-                  {device.type === 'docker' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
-                  )}
-                  {device.type === 'tailscale' && (
-                    <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
-                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap gap-2">
+                    {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
+                      </>
+                    )}
+                    {device.type === 'wol' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
+                    )}
+                    {device.type === 'proxmox' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
+                    )}
+                    {(device.type === 'rdp' || device.type === 'ssh') && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
+                    )}
+                    {device.type === 'http' && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                      </>
+                    )}
+                    {device.type === 'tasmota' && (
+                      <>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
+                      </>
+                    )}
+                    {device.type === 'docker' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
+                    )}
+                    {device.type === 'tailscale' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
@@ -2479,92 +2560,151 @@ function Dashboard({ user, setup, onSignOut }: {
     if (r.ok) setWidgets((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const ALL_NAV = [
+    ...visibleNav,
+    { key: 'settings' as Tab, label: 'Einstellungen', icon: <IcGear size={15} />, color: '#8E8E93' },
+  ];
+
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${t.page} p-3 md:p-4 animate-fade-in`}
-      style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}>
-      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] gap-3 md:gap-4">
+    <div className="min-h-screen flex animate-fade-in"
+      style={{
+        background: '#000000',
+        '--accent-ring': `${accent}45`,
+        '--accent-color': accent,
+      } as React.CSSProperties}>
 
-        {/* Sidebar */}
-        <aside className={`flex w-[220px] shrink-0 flex-col rounded-2xl border backdrop-blur-xl
-          transition-shadow duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}15`, borderColor: `${accent}1A` }}>
-          <div className={`border-b px-4 py-4 ${t.divider}`}>
-            <div className="flex items-center gap-2.5">
-              <img src="/logo.svg" alt="Logo" className="h-8 w-8 rounded-xl"
-                style={{ boxShadow: `0 2px 8px ${accent}44` }} />
-              <span className={`text-sm font-semibold ${t.text}`}>{setup.dashboardName}</span>
+      {/* ── Mesh background orbs ────────────────────── */}
+      <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
+        {/* Top-left accent glow */}
+        <div style={{ position:'absolute', top:'-15%', left:'-10%', width:'55%', height:'55%',
+          background:`radial-gradient(ellipse, ${accent}22 0%, transparent 65%)`, filter:'blur(70px)' }} />
+        {/* Top-right purple glow */}
+        <div style={{ position:'absolute', top:'-5%', right:'-10%', width:'45%', height:'45%',
+          background:'radial-gradient(ellipse, #5856D61C 0%, transparent 65%)', filter:'blur(60px)' }} />
+        {/* Bottom center violet */}
+        <div style={{ position:'absolute', bottom:'-10%', left:'25%', width:'50%', height:'40%',
+          background:'radial-gradient(ellipse, #AF52DE10 0%, transparent 65%)', filter:'blur(80px)' }} />
+      </div>
+
+      {/* ── Sidebar — Apple TV style ─────────────────── */}
+      <aside className="glass-dark flex w-[232px] shrink-0 flex-col rounded-[24px] m-3 relative z-10 animate-slide-left">
+
+        {/* App name */}
+        <div className="px-5 pt-6 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[11px] shrink-0"
+              style={{
+                background: `linear-gradient(150deg, ${accent} 0%, ${accent}BB 100%)`,
+                boxShadow: `0 4px 12px ${accent}55, inset 0 1px 0 rgba(255,255,255,0.3)`,
+              }}>
+              <img src="/logo.svg" alt="Logo" className="h-[20px] w-[20px]" />
             </div>
+            <span className="text-[15px] font-semibold tracking-[-0.2px] text-white">{setup.dashboardName}</span>
           </div>
+        </div>
 
-          <nav className="flex flex-1 flex-col gap-0.5 p-2">
-            {visibleNav.map((item) => (
+        {/* Nav */}
+        <nav className="flex flex-1 flex-col gap-0.5 px-3 pb-2">
+          {ALL_NAV.map((item, i) => {
+            const active = tab === item.key;
+            return (
               <button key={item.key} onClick={() => goTab(item.key)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition-all
-                  ${tab === item.key ? t.navActive : t.navHover} ${t.text}`}
-                style={tab === item.key ? { color: accent } : {}}>
-                <span className="text-base leading-none">{item.icon}</span>
-                <span>{item.label}</span>
+                className={`flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left text-[14px] font-[450]
+                  transition-all duration-200 animate-slide-left delay-${i} active:scale-[0.98]`}
+                style={active ? {
+                  background: 'rgba(255,255,255,0.09)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 6px rgba(0,0,0,0.25)',
+                } : {
+                  background: 'transparent',
+                }}>
+                {/* Colored icon badge */}
+                <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white transition-all duration-200"
+                  style={{
+                    background: active
+                      ? `linear-gradient(145deg, ${item.color}EE, ${item.color}BB)`
+                      : 'rgba(255,255,255,0.07)',
+                    boxShadow: active
+                      ? `0 2px 8px ${item.color}55, inset 0 1px 0 rgba(255,255,255,0.25)`
+                      : 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                    opacity: active ? 1 : 0.65,
+                  }}>
+                  {item.icon}
+                </div>
+                <span style={{ color: active ? '#FFFFFF' : 'rgba(255,255,255,0.65)' }}>{item.label}</span>
               </button>
-            ))}
-          </nav>
+            );
+          })}
+        </nav>
 
-          <div className={`border-t p-2 ${t.divider}`}>
-            <div className="relative">
-              <button onClick={() => setProfileOpen((v) => !v)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all ${t.navHover}`}>
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  style={{ backgroundColor: accent }}>
-                  {user.email[0].toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <p className={`truncate text-xs font-medium ${t.text}`}>{user.email}</p>
-                  <p className={`text-[10px] capitalize ${t.muted}`}>{user.role}</p>
-                </div>
-              </button>
-              {profileOpen && (
-                <div className={`absolute bottom-full left-0 mb-1 w-full rounded-xl border p-1
-                  ${t.card} ${t.border} animate-slide-up`} style={{ boxShadow: t.shadow }}>
-                  <button onClick={() => goTab('settings')}
-                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition-all ${t.navHover} ${t.text}`}>
-                    Einstellungen
-                  </button>
-                  <button onClick={signOut}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-xs text-red-500 transition-all hover:bg-red-500/10">
-                    Abmelden
-                  </button>
-                </div>
-              )}
-            </div>
+        {/* User */}
+        <div className="px-3 pb-4 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="relative">
+            <button onClick={() => setProfileOpen((v) => !v)}
+              className="flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left transition-all duration-150"
+              style={{ ':hover': { background: 'rgba(255,255,255,0.06)' } } as any}>
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${accent} 0%, ${accent}CC 100%)`,
+                  boxShadow: `0 2px 8px ${accent}50`,
+                }}>
+                {user.email[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-white/80">{user.email}</p>
+                <p className="text-[11px] capitalize text-white/40">{user.role}</p>
+              </div>
+            </button>
+            {profileOpen && (
+              <div className="glass-card absolute bottom-full left-0 mb-2 w-full rounded-[16px] p-1.5 animate-spring-in">
+                <button onClick={signOut}
+                  className="flex w-full items-center gap-2.5 rounded-[11px] px-3 py-2.5 text-left text-[13px] font-medium text-[#FF453A] transition-all hover:bg-[#FF453A]/12">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25z" clipRule="evenodd"/>
+                    <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-1.16a.75.75 0 1 1 1.104-1.02l2.5 2.75a.75.75 0 0 1 0 1.02l-2.5 2.75a.75.75 0 1 1-1.104-1.02l1.048-1.16H6.75A.75.75 0 0 1 6 10z" clipRule="evenodd"/>
+                  </svg>
+                  Abmelden
+                </button>
+              </div>
+            )}
           </div>
-        </aside>
+        </div>
+      </aside>
 
-        {/* Content */}
-        <main className={`min-w-0 flex-1 rounded-2xl border backdrop-blur-xl p-5 md:p-6
-          transition-shadow duration-300 ${t.card} ${t.border}`}
-          style={{ boxShadow: `${t.shadowSm}, inset 0 1px 0 0 ${accent}12`, borderColor: `${accent}18` }}>
+      {/* ── Content ──────────────────────────────────── */}
+      <main className="glass-dark min-w-0 flex-1 rounded-[24px] m-3 ml-0 p-6 md:p-8 relative z-10 overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 1.5rem)' }}>
+
+        <div key={tab} className="animate-tab-in h-full">
 
           {tab === 'home' && (
-            <div className="animate-slide-right space-y-4">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className={`text-xl font-semibold ${t.text}`}>Übersicht</h1>
-                  <p className={`text-sm ${t.muted}`}>Guten Tag, {user.email.split('@')[0]}</p>
+                  <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-white">Übersicht</h1>
+                  <p className="text-[14px] text-white/45">Guten Tag, {user.email.split('@')[0]}</p>
                 </div>
-                <Btn accent={accent} size="sm" variant="secondary" onClick={() => setShowAddWidget(true)}>+ Widget</Btn>
+                <button onClick={() => setShowAddWidget(true)}
+                  className="glass-pill rounded-[12px] px-4 py-2 text-[13px] font-medium text-white/80 transition-all hover:text-white active:scale-[0.97]">
+                  + Widget
+                </button>
               </div>
 
               {showAddWidget && (
-                <div className={`rounded-2xl border p-5 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
-                  <p className={`mb-4 font-medium ${t.text}`}>Widget hinzufügen</p>
+                <div className="glass-subtle rounded-[20px] p-5"
+                  style={{ borderColor: `${accent}20` }}>
+                  <p className="mb-4 font-semibold text-white/80">Widget hinzufügen</p>
                   <WidgetForm onSave={addWidget} onCancel={() => setShowAddWidget(false)} devices={devices} t={t} accent={accent} />
                 </div>
               )}
 
               {widgets.length === 0 && !showAddWidget && (
-                <div className={`rounded-2xl border border-dashed p-12 text-center ${t.border}`}>
-                  <p className="text-4xl mb-3">🧩</p>
-                  <p className={`font-medium ${t.text}`}>Keine Widgets</p>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
+                <div className="glass-subtle rounded-[20px] p-16 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] text-white/30"
+                    style={{ background: `${accent}15` }}>
+                    <IcGrid size={24} />
+                  </div>
+                  <p className="font-semibold text-white/70">Keine Widgets</p>
+                  <p className="mt-1 text-[13px] text-white/35">Klicke auf „+ Widget" um dein Dashboard anzupassen.</p>
                 </div>
               )}
 
@@ -2574,8 +2714,7 @@ function Dashboard({ user, setup, onSignOut }: {
                   const rowH = widget.layout.h === 1 ? 'h-32' : widget.layout.h === 2 ? 'h-44' : 'h-64';
                   return (
                     <div key={widget.id}
-                      className={`col-span-12 md:col-span-${colSpan} animate-slide-up`}
-                      style={{ animationDelay: `${i * 40}ms` }}>
+                      className={`col-span-12 md:col-span-${colSpan} animate-slide-up delay-${Math.min(i, 6)}`}>
                       <div className={rowH}>
                         <WidgetRenderer widget={widget} devices={devices} t={t} accent={accent}
                           onRemove={() => removeWidget(widget.id)} statuses={monitorStatuses} />
@@ -2608,8 +2747,9 @@ function Dashboard({ user, setup, onSignOut }: {
           {tab === 'admin' && canAdmin && (
             <AdminTab t={t} accent={accent} />
           )}
+
+        </div>{/* end key={tab} wrapper */}
         </main>
-      </div>
     </div>
   );
 }
