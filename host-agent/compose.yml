@@ -5,11 +5,11 @@
 #   1. Copy this file + .env.example to ~/sm-host-agent/ on the host
 #   2. cp .env.example .env && nano .env  (set PI_AGENT_URL + AGENT_SECRET)
 #   3. echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-#   4. docker compose -f compose.prod.yml pull
-#   5. docker compose -f compose.prod.yml up -d
+#   4. docker compose pull
+#   5. docker compose up -d
 #
 # To update:
-#   docker compose -f compose.prod.yml pull && docker compose -f compose.prod.yml up -d
+#   docker compose pull && docker compose up -d
 
 services:
   sm-host-agent:

@@ -179,7 +179,8 @@ DATA_DIR=./data
 ### Start
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f
 ```
 
@@ -238,7 +239,8 @@ PORT=3001
 ### Start
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f sm-dashboard
 ```
 
