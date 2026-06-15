@@ -2710,6 +2710,32 @@ function Dashboard({ user, setup, onSignOut }: {
 
   const goTab = (k: Tab) => { setTab(k); setProfileOpen(false); };
 
+  // ── Long-press to enter edit mode (Apple-homescreen style) ──
+  const lpTimer = useRef<number | null>(null);
+  const lpStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const cancelLongPress = () => {
+    if (lpTimer.current != null) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    lpStart.current = null;
+  };
+  const onDashboardPointerDown = (e: React.PointerEvent) => {
+    if (editMode || e.button !== 0) return;
+    lpStart.current = { x: e.clientX, y: e.clientY };
+    lpTimer.current = window.setTimeout(() => {
+      setEditMode(true);
+      suppressClick.current = true;                       // swallow the activating tap
+      window.setTimeout(() => { suppressClick.current = false; }, 400);
+      if (navigator.vibrate) navigator.vibrate(8);
+    }, 500);
+  };
+  const onDashboardPointerMove = (e: React.PointerEvent) => {
+    if (!lpStart.current) return;
+    if (Math.abs(e.clientX - lpStart.current.x) > 10 || Math.abs(e.clientY - lpStart.current.y) > 10) cancelLongPress();
+  };
+  const onDashboardClickCapture = (e: React.MouseEvent) => {
+    if (suppressClick.current) { suppressClick.current = false; e.preventDefault(); e.stopPropagation(); }
+  };
+
   const signOut = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     onSignOut();
@@ -2875,34 +2901,44 @@ function Dashboard({ user, setup, onSignOut }: {
         <div key={tab} className="animate-tab-in h-full">
 
           {tab === 'home' && (
-            <div className="space-y-6">
+            <div className="space-y-6 select-none"
+              onPointerDown={onDashboardPointerDown}
+              onPointerMove={onDashboardPointerMove}
+              onPointerUp={cancelLongPress}
+              onPointerLeave={cancelLongPress}
+              onPointerCancel={cancelLongPress}
+              onClickCapture={onDashboardClickCapture}>
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Übersicht</h1>
-                  <p className="text-[14px]" style={{ color: s.fgMuted }}>Guten Tag, {user.email.split('@')[0]}</p>
+                  <p className="text-[14px]" style={{ color: s.fgMuted }}>
+                    {editMode ? 'Dashboard bearbeiten' : `Guten Tag, ${user.email.split('@')[0]}`}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {editMode && (
+                {editMode && (
+                  <div className="flex items-center gap-2 animate-scale-in">
                     <button onClick={() => setShowAddWidget(true)}
-                      className={`${s.glassPill} rounded-[12px] px-4 py-2 text-[13px] font-medium transition-all active:scale-[0.97]`}
+                      className={`${s.glassPill} rounded-full px-4 py-2 text-[13px] font-medium transition-all active:scale-[0.97]`}
                       style={{ color: s.fg }}>
                       + Widget
                     </button>
-                  )}
-                  <button onClick={() => { setEditMode((v) => !v); setShowAddWidget(false); }}
-                    className="rounded-[12px] px-4 py-2 text-[13px] font-semibold transition-all active:scale-[0.97]"
-                    style={editMode
-                      ? { background: accent, color: '#fff', boxShadow: `0 2px 10px ${accent}55` }
-                      : { background: `${accent}1A`, color: accent }}>
-                    {editMode ? 'Fertig' : 'Bearbeiten'}
-                  </button>
-                </div>
+                    {/* Hackerl — confirm / leave edit mode */}
+                    <button onClick={() => { setEditMode(false); setShowAddWidget(false); }}
+                      aria-label="Fertig" title="Fertig"
+                      className="flex h-9 w-9 items-center justify-center rounded-full transition-all active:scale-90 hover:scale-105"
+                      style={{ background: accent, color: '#fff', boxShadow: `0 3px 12px ${accent}66, inset 0 1px 0 rgba(255,255,255,0.3)` }}>
+                      <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+                        <path d="M4.5 10.5l3.5 3.5 7.5-7.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {editMode && (
-                <div className="rounded-[14px] px-4 py-2.5 text-[12.5px]"
+                <div className="flex items-center gap-2 rounded-[14px] px-4 py-2.5 text-[12.5px] animate-slide-up"
                   style={{ background: `${accent}12`, color: s.fgMuted, border: `1px solid ${accent}22` }}>
-                  Bearbeitungsmodus aktiv — Kacheln per +/− vergrößern oder mit × entfernen. Tippe auf „Fertig", wenn du fertig bist.
+                  <span>Bearbeitungsmodus — Kacheln per +/− vergrößern oder mit × entfernen. Zum Beenden oben auf das Hackerl ✓ tippen.</span>
                 </div>
               )}
 
@@ -2922,7 +2958,7 @@ function Dashboard({ user, setup, onSignOut }: {
                   </div>
                   <p className="font-semibold" style={{ color: s.fg }}>Keine Widgets</p>
                   <p className="mt-1 text-[13px]" style={{ color: s.fgMuted }}>
-                    {editMode ? 'Klicke auf „+ Widget", um dein Dashboard anzupassen.' : 'Tippe auf „Bearbeiten", um Widgets hinzuzufügen.'}
+                    {editMode ? 'Klicke auf „+ Widget", um dein Dashboard anzupassen.' : 'Halte das Dashboard gedrückt, um es zu bearbeiten.'}
                   </p>
                 </div>
               )}
