@@ -176,6 +176,28 @@
     0 2px 12px rgba(0,0,0,0.25);
 }
 
+/* Subtle glass — light mode device cards, list items */
+.glass-subtle-light {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.9),
+    0 2px 14px rgba(0,0,0,0.06);
+}
+
+/* Light pill — light mode buttons/pills */
+.glass-pill-light {
+  background: rgba(0,0,0,0.04);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.8),
+    0 1px 4px rgba(0,0,0,0.05);
+}
+
 /* Active nav pill */
 .glass-pill {
   background: rgba(255,255,255,0.10);
@@ -188,8 +210,20 @@
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.28); }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.45); }
+
+/* ── HA-style dashboard edit mode ────────────────────────────── */
+.edit-outline {
+  outline: 1.5px dashed var(--accent-color, #007AFF);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+@keyframes editWiggle {
+  0%, 100% { transform: rotate(-0.45deg); }
+  50%       { transform: rotate(0.45deg); }
+}
+.animate-edit-wiggle { animation: editWiggle 0.34s ease-in-out infinite; }
 
 /* ── Smooth transitions ──────────────────────────────────────── */
 * { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
