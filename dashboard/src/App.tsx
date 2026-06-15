@@ -501,6 +501,61 @@ function StatusMsg({ msg, t }: { msg: string; t: ReturnType<typeof tok> }) {
   );
 }
 
+// iOS-style toggle switch.
+function Toggle({ checked, onChange, accent, label }: {
+  checked: boolean; onChange: (v: boolean) => void; accent: string; label?: string;
+}) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label}
+      onClick={() => onChange(!checked)}
+      className="relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-300 outline-none"
+      style={{
+        background: checked ? accent : 'rgba(120,120,128,0.32)',
+        boxShadow: checked
+          ? `0 1px 3px ${accent}55, inset 0 0 0 1px rgba(0,0,0,0.04)`
+          : 'inset 0 0 0 1px rgba(0,0,0,0.04)',
+      }}>
+      <span className="absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white transition-transform duration-300"
+        style={{
+          transform: checked ? 'translateX(20px)' : 'translateX(0)',
+          boxShadow: '0 3px 8px rgba(0,0,0,0.18), 0 1px 1px rgba(0,0,0,0.16)',
+        }} />
+    </button>
+  );
+}
+
+// iOS-style segmented control with a sliding thumb.
+function Segmented<T extends string>({ options, value, onChange, accent, s }: {
+  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void;
+  accent: string; s: ShellTokens;
+}) {
+  const idx = Math.max(0, options.findIndex((o) => o.value === value));
+  const light = s.glass === 'glass-light';
+  return (
+    <div className="relative flex rounded-[11px] p-[3px]"
+      style={{ background: light ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.24)' }}>
+      {/* sliding thumb */}
+      <div className="pointer-events-none absolute top-[3px] bottom-[3px] rounded-[8.5px] transition-transform duration-300"
+        style={{
+          width: `calc((100% - 6px) / ${options.length})`,
+          transform: `translateX(${idx * 100}%)`,
+          background: light ? '#FFFFFF' : 'rgba(99,99,102,0.85)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.14), 0 0 1px rgba(0,0,0,0.12)',
+        }} />
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button key={o.value} type="button" onClick={() => onChange(o.value)}
+            className="relative z-10 flex-1 rounded-[8.5px] py-[7px] text-[13px] transition-colors duration-200"
+            style={{ color: active ? s.fg : s.fgMuted, fontWeight: active ? 600 : 500 }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const readErr = async (r: Response, fallback: string) => {
   try { return ((await r.json()) as { error?: string }).error ?? fallback; } catch { return fallback; }
 };
@@ -1812,14 +1867,14 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] =
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, devices, setDevices, widgets, setWidgets, t }: {
+function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, devices, setDevices, widgets, setWidgets, t, s }: {
   user: SessionUser; theme: ThemeMode; setTheme: (t: ThemeMode) => void;
   accent: string; setAccent: (a: string) => void;
   cardSize: CardSize; setCardSize: (c: CardSize) => void;
   sidebarCompact: boolean; setSidebarCompact: (v: boolean) => void;
   devices: Device[]; setDevices: (d: Device[]) => void;
   widgets: Widget[]; setWidgets: (w: Widget[]) => void;
-  t: ReturnType<typeof tok>;
+  t: ReturnType<typeof tok>; s: ShellTokens;
 }) {
   const canAdmin = user.role === 'root' || user.role === 'admin';
   const [showDeviceForm, setShowDeviceForm] = useState(false);
@@ -1920,62 +1975,44 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
       <h1 className={`text-xl font-semibold ${t.text}`}>Einstellungen</h1>
 
       {/* Appearance */}
-      <section className={`rounded-2xl border p-5 space-y-5 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
-        <h2 className={`font-semibold ${t.text}`}>Darstellung</h2>
-        <div className="space-y-1.5">
-          <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
-              <button key={m} onClick={() => setTheme(m)}
-                className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
-                  theme === m ? '' : `opacity-40 hover:opacity-70`
-                } ${t.border}`}
-                style={theme === m ? { borderColor: accent, color: accent, backgroundColor: `${accent}12` } : {}}>
-                {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
-              </button>
-            ))}
-          </div>
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-5`} style={{ boxShadow: s.cardShadow }}>
+        <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Darstellung</h2>
+
+        <div className="space-y-2">
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Design</label>
+          <Segmented accent={accent} s={s} value={theme} onChange={setTheme}
+            options={[
+              { value: 'light', label: 'Hell' },
+              { value: 'dark', label: 'Dunkel' },
+              { value: 'ultra-dark', label: 'Ultra' },
+            ]} />
         </div>
-        <div className="space-y-1.5">
-          <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
+
+        <div className="space-y-2">
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Akzentfarbe</label>
           <ColorPicker value={accent} onChange={setAccent} t={t} />
         </div>
 
-        <div className="space-y-1.5">
-          <label className={`block text-sm font-medium ${t.muted}`}>Kartengröße</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(Object.keys(CARD_SIZE_CONFIG) as CardSize[]).map((c) => (
-              <button key={c} onClick={() => setCardSize(c)}
-                className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
-                  cardSize === c ? '' : 'opacity-40 hover:opacity-70'
-                } ${t.border}`}
-                style={cardSize === c ? { borderColor: accent, color: accent, backgroundColor: `${accent}12` } : {}}>
-                {CARD_SIZE_CONFIG[c].label}
-              </button>
-            ))}
-          </div>
-          <p className={`text-xs ${t.muted}`}>Bestimmt, wie groß die Gerätekacheln auf dem Geräte-Tab angezeigt werden.</p>
+        <div className="space-y-2">
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Kartengröße</label>
+          <Segmented accent={accent} s={s} value={cardSize} onChange={setCardSize}
+            options={(Object.keys(CARD_SIZE_CONFIG) as CardSize[]).map((c) => ({ value: c, label: CARD_SIZE_CONFIG[c].label }))} />
+          <p className="text-[12px]" style={{ color: s.fgFaint }}>Bestimmt, wie groß die Gerätekacheln auf dem Geräte-Tab angezeigt werden.</p>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <label className={`block text-sm font-medium ${t.text}`}>Kompakte Seitenleiste</label>
-            <p className={`text-xs ${t.muted}`}>Nur Symbole anzeigen, mehr Platz für Inhalte.</p>
+        <div className="flex items-center justify-between gap-4 pt-1">
+          <div className="min-w-0">
+            <label className="block text-[14px] font-medium" style={{ color: s.fg }}>Kompakte Seitenleiste</label>
+            <p className="text-[12px]" style={{ color: s.fgMuted }}>Nur Symbole anzeigen, mehr Platz für Inhalte.</p>
           </div>
-          <button onClick={() => setSidebarCompact(!sidebarCompact)}
-            className="relative h-[30px] w-[51px] shrink-0 rounded-full transition-colors duration-200"
-            style={{ backgroundColor: sidebarCompact ? accent : 'rgba(120,120,128,0.32)' }}
-            role="switch" aria-checked={sidebarCompact} aria-label="Kompakte Seitenleiste">
-            <span className="absolute top-[2px] h-[26px] w-[26px] rounded-full bg-white shadow-md transition-transform duration-200"
-              style={{ transform: sidebarCompact ? 'translateX(23px)' : 'translateX(2px)' }} />
-          </button>
+          <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Kompakte Seitenleiste" />
         </div>
       </section>
 
       {/* Widgets */}
-      <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div className="flex items-center justify-between">
-          <h2 className={`font-semibold ${t.text}`}>Widgets</h2>
+          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Widgets</h2>
           {!showWidgetForm && (
             <Btn accent={accent} size="sm" onClick={() => setShowWidgetForm(true)}>+ Widget</Btn>
           )}
@@ -2016,9 +2053,9 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
 
       {/* Devices (admin only) */}
       {canAdmin && (
-        <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+        <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
           <div className="flex items-center justify-between">
-            <h2 className={`font-semibold ${t.text}`}>Geräte verwalten</h2>
+            <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Geräte verwalten</h2>
             {!showDeviceForm && !editDevice && (
               <div className="flex gap-2">
                 <Btn accent={accent} variant="secondary" size="sm" onClick={runDiscovery} loading={discovering}>
@@ -2624,11 +2661,11 @@ function DiscoveryTab({ devices, setDevices, t, accent }: {
 // ── Dashboard shell ───────────────────────────────────────────────────────────
 
 // Small +/− stepper button used in the home dashboard edit overlay.
-function EditStepper({ sym, label, onClick, s }: { sym: string; label: string; onClick: () => void; s: ShellTokens }) {
+function EditStepper({ sym, label, onClick, accent }: { sym: string; label: string; onClick: () => void; accent: string }) {
   return (
     <button onClick={onClick} aria-label={label} title={label}
-      className="flex h-[22px] w-[22px] items-center justify-center rounded-full text-[13px] font-semibold leading-none transition-all hover:scale-110 active:scale-95"
-      style={{ color: s.fg, background: s.navIdleBadge }}>
+      className="flex h-[24px] w-[24px] items-center justify-center rounded-full text-[14px] font-semibold leading-none text-white transition-transform duration-150 hover:scale-110 active:scale-90"
+      style={{ background: `linear-gradient(145deg, ${accent}, ${accent}CC)`, boxShadow: `0 2px 6px ${accent}55` }}>
       {sym}
     </button>
   );
@@ -2902,15 +2939,20 @@ function Dashboard({ user, setup, onSignOut }: {
                         <WidgetRenderer widget={widget} devices={devices} t={t} accent={accent}
                           onRemove={editMode ? () => removeWidget(widget.id) : undefined} statuses={monitorStatuses} />
                         {editMode && (
-                          <div className="absolute -top-3 right-2 z-20 flex items-center gap-1 rounded-full px-1.5 py-1"
-                            style={{ background: s.glass === 'glass-light' ? 'rgba(255,255,255,0.95)' : 'rgba(28,28,30,0.95)',
-                              boxShadow: '0 4px 14px rgba(0,0,0,0.28)', border: `1px solid ${s.hairline}` }}>
-                            <EditStepper label="Breite verkleinern" sym="−" onClick={() => resizeWidget(widget.id, -1, 0)} s={s} />
-                            <span className="px-0.5 text-[11px] font-semibold tabular-nums" style={{ color: s.fgMuted }}>{widget.layout.w}×{widget.layout.h}</span>
-                            <EditStepper label="Breite vergrößern" sym="+" onClick={() => resizeWidget(widget.id, 1, 0)} s={s} />
-                            <span className="mx-0.5 w-px self-stretch" style={{ background: s.hairline }} />
-                            <EditStepper label="Höhe verkleinern" sym="▾" onClick={() => resizeWidget(widget.id, 0, -1)} s={s} />
-                            <EditStepper label="Höhe vergrößern" sym="▴" onClick={() => resizeWidget(widget.id, 0, 1)} s={s} />
+                          <div className="absolute -top-3.5 right-2 z-20 flex items-center gap-1.5 rounded-full px-2 py-1.5"
+                            style={{
+                              background: s.glass === 'glass-light' ? 'rgba(255,255,255,0.82)' : 'rgba(28,28,30,0.82)',
+                              backdropFilter: 'blur(20px) saturate(180%)',
+                              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',
+                              border: `1px solid ${s.hairline}`,
+                            }}>
+                            <EditStepper label="Breite verkleinern" sym="−" onClick={() => resizeWidget(widget.id, -1, 0)} accent={accent} />
+                            <span className="min-w-[26px] text-center text-[11px] font-semibold tabular-nums" style={{ color: s.fg }}>{widget.layout.w}×{widget.layout.h}</span>
+                            <EditStepper label="Breite vergrößern" sym="+" onClick={() => resizeWidget(widget.id, 1, 0)} accent={accent} />
+                            <span className="mx-0.5 h-[18px] w-px self-center" style={{ background: s.hairline }} />
+                            <EditStepper label="Höhe verkleinern" sym="▾" onClick={() => resizeWidget(widget.id, 0, -1)} accent={accent} />
+                            <EditStepper label="Höhe vergrößern" sym="▴" onClick={() => resizeWidget(widget.id, 0, 1)} accent={accent} />
                           </div>
                         )}
                       </div>
@@ -2933,7 +2975,7 @@ function Dashboard({ user, setup, onSignOut }: {
               sidebarCompact={sidebarCompact} setSidebarCompact={setSidebarCompact}
               devices={devices} setDevices={setDevices}
               widgets={widgets} setWidgets={setWidgets}
-              t={t}
+              t={t} s={s}
             />
           )}
 
