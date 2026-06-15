@@ -14,17 +14,22 @@ type AdminUser = { id: string; email: string; role: Role; hasPasskey: boolean };
 
 type PermissionFlag =
   | 'control:plugs' | 'control:lights' | 'control:wol'
-  | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http'
+  | 'view:proxmox' | 'control:proxmox' | 'control:lxc' | 'view:rdp' | 'control:rdp'
+  | 'view:ssh' | 'control:ssh' | 'view:console' | 'control:http'
   | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: { flag: PermissionFlag; label: string; desc: string }[] = [
   { flag: 'control:plugs',    label: 'Steckdosen',      desc: 'Smart Plugs ein/ausschalten' },
   { flag: 'control:lights',   label: 'Licht',            desc: 'Lichter steuern' },
   { flag: 'control:wol',      label: 'Wake-on-LAN',      desc: 'Geräte per WOL aufwecken' },
-  { flag: 'view:proxmox',     label: 'Proxmox (lesen)',  desc: 'VMs einsehen' },
-  { flag: 'control:proxmox',  label: 'Proxmox (ctrl)',   desc: 'VMs starten/stoppen' },
+  { flag: 'view:proxmox',     label: 'Proxmox (lesen)',  desc: 'VMs & Container einsehen' },
+  { flag: 'control:proxmox',  label: 'Proxmox VMs',      desc: 'KVM-VMs starten/stoppen' },
+  { flag: 'control:lxc',      label: 'LXC-Container',    desc: 'LXC-Container starten/stoppen' },
+  { flag: 'view:console',     label: 'Konsole/Remote',   desc: 'Web-Konsole & Remote-Sessions öffnen' },
   { flag: 'view:rdp',         label: 'RDP anzeigen',     desc: 'RDP-Verbindungsdaten sehen' },
+  { flag: 'control:rdp',      label: 'RDP-Session',      desc: 'RDP-Session starten' },
   { flag: 'view:ssh',         label: 'SSH anzeigen',     desc: 'SSH-Verbindungsdaten sehen' },
+  { flag: 'control:ssh',      label: 'SSH-Session',      desc: 'SSH-Session starten' },
   { flag: 'control:http',     label: 'HTTP-Geräte',      desc: 'HTTP-Gerätebefehle senden' },
   { flag: 'control:tasmota',  label: 'Tasmota-Geräte',   desc: 'Tasmota Steckdosen steuern' },
   { flag: 'view:docker',      label: 'Docker (lesen)',   desc: 'Container-Status einsehen' },
@@ -46,6 +51,7 @@ type DeviceConfig =
 
 type Device = {
   id: string; name: string; type: string; room?: string; icon?: string;
+  tags?: string[]; // free-form user labels for grouping/filtering
   config?: DeviceConfig; // absent in zero-knowledge mode (Pi Agent configured)
   requiredPermissions: PermissionFlag[];
 };
@@ -627,8 +633,16 @@ function DeviceForm({
   const [tailscaleApiKey, setTailscaleApiKey] = useState((initial?.config as any)?.apiKey ?? '');
   const [tailscaleTailnet, setTailscaleTailnet] = useState((initial?.config as any)?.tailnet ?? '');
   const [perms, setPerms] = useState<PermissionFlag[]>(initial?.requiredPermissions ?? []);
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagDraft, setTagDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
+
+  const addTag = (raw: string) => {
+    const v = raw.trim().replace(/,$/, '').trim();
+    if (v && !tags.includes(v) && tags.length < 12) setTags([...tags, v]);
+    setTagDraft('');
+  };
 
   // When editing an existing device, load the sensitive config from server (Pi Agent)
   useEffect(() => {
@@ -682,7 +696,7 @@ function DeviceForm({
     const config = buildConfig();
     if (!name || !config) return;
     setLoading(true);
-    await onSave({ name, type: config.type, room: room || undefined, config, requiredPermissions: perms });
+    await onSave({ name, type: config.type, room: room || undefined, tags, config, requiredPermissions: perms });
     setLoading(false);
   };
 
@@ -765,6 +779,32 @@ function DeviceForm({
           <Input label="Tailnet" value={tailscaleTailnet} onChange={setTailscaleTailnet} placeholder="deine-organisation.ts.net" t={t} accent={accent} />
         </div>
       )}
+
+      <div className="space-y-2">
+        <label className={`block text-sm font-medium ${t.muted}`}>Tags (optional)</label>
+        <div className={`flex flex-wrap items-center gap-1.5 rounded-xl px-2.5 py-2 ${t.inputBg}`}>
+          {tags.map((tag) => (
+            <span key={tag} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+              style={{ background: `${accent}1A`, color: accent }}>
+              {tag}
+              <button type="button" onClick={() => setTags(tags.filter((x) => x !== tag))}
+                className="opacity-60 hover:opacity-100" aria-label={`Tag ${tag} entfernen`}>×</button>
+            </span>
+          ))}
+          <input
+            value={tagDraft}
+            onChange={(e) => setTagDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); }
+              else if (e.key === 'Backspace' && !tagDraft && tags.length) setTags(tags.slice(0, -1));
+            }}
+            onBlur={() => tagDraft && addTag(tagDraft)}
+            placeholder={tags.length ? 'Tag…' : 'z. B. gameserver, kritisch, gast'}
+            className={`flex-1 min-w-[100px] bg-transparent text-sm outline-none ${t.inputText}`}
+          />
+        </div>
+        <p className={`text-xs ${t.muted}`}>Mit Enter oder Komma bestätigen. Tags helfen beim Gruppieren und Filtern auf dem Geräte-Tab.</p>
+      </div>
 
       <div className="space-y-2">
         <label className={`block text-sm font-medium ${t.muted}`}>Berechtigungen (wer darf dieses Gerät sehen)</label>
@@ -1365,12 +1405,12 @@ function ProxmoxVmsWidget({ config, devices, t, accent }: {
     setLoading(false);
   };
 
-  const vmAction = async (vmid: string, vmAct: string) => {
+  const vmAction = async (vmid: string, vmAct: string, vmKind: string) => {
     if (!device) return;
     setActing(vmid);
     await fetch(`/api/devices/${device.id}/action`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', body: JSON.stringify({ action: 'vm_ctrl', vmId: vmid, vmAction: vmAct }),
+      credentials: 'include', body: JSON.stringify({ action: 'vm_ctrl', vmId: vmid, vmAction: vmAct, vmKind }),
     });
     setTimeout(() => { void load(); setActing(null); }, 1200);
   };
@@ -1390,28 +1430,33 @@ function ProxmoxVmsWidget({ config, devices, t, accent }: {
       <div className="flex flex-col gap-1.5 overflow-auto">
         {vms.map((vm) => {
           const running = vm.status === 'running';
+          const kind = vm._kind === 'lxc' ? 'lxc' : 'qemu';
           const cpu = vm.cpu ? `${(vm.cpu * 100).toFixed(1)}%` : null;
           const mem = vm.mem && vm.maxmem ? `${Math.round((vm.mem / vm.maxmem) * 100)}%` : null;
           return (
-            <div key={vm.vmid} className={`rounded-xl border p-2.5 ${t.border}`}>
+            <div key={`${kind}-${vm.vmid}`} className={`rounded-xl border p-2.5 ${t.border}`}>
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <div className={`h-1.5 w-1.5 rounded-full ${running ? 'bg-green-500' : 'bg-red-500/60'}`} />
-                  <p className={`text-xs font-medium ${t.text}`}>{vm.name ?? `VM ${vm.vmid}`}</p>
-                  <span className={`text-[10px] ${t.muted}`}>#{vm.vmid}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'bg-green-500' : 'bg-red-500/60'}`} />
+                  <span className="shrink-0 rounded px-1 py-px text-[9px] font-bold tracking-wide"
+                    style={{ color: kind === 'lxc' ? '#FF9500' : accent, background: kind === 'lxc' ? '#FF950018' : `${accent}18` }}>
+                    {kind === 'lxc' ? 'LXC' : 'VM'}
+                  </span>
+                  <p className={`truncate text-xs font-medium ${t.text}`}>{vm.name ?? `${kind === 'lxc' ? 'CT' : 'VM'} ${vm.vmid}`}</p>
+                  <span className={`shrink-0 text-[10px] ${t.muted}`}>#{vm.vmid}</span>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex shrink-0 gap-1">
                   {running ? (
                     <>
-                      <button onClick={() => vmAction(vm.vmid, 'shutdown')} disabled={acting === vm.vmid}
+                      <button onClick={() => vmAction(vm.vmid, 'shutdown', kind)} disabled={acting === vm.vmid}
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
                         {acting === vm.vmid ? '…' : 'Stop'}
                       </button>
-                      <button onClick={() => vmAction(vm.vmid, 'reboot')} disabled={acting === vm.vmid}
+                      <button onClick={() => vmAction(vm.vmid, 'reboot', kind)} disabled={acting === vm.vmid}
                         className={`rounded px-1.5 py-0.5 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-70`}>↺</button>
                     </>
                   ) : (
-                    <button onClick={() => vmAction(vm.vmid, 'start')} disabled={acting === vm.vmid}
+                    <button onClick={() => vmAction(vm.vmid, 'start', kind)} disabled={acting === vm.vmid}
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.inputBg}`} style={{ color: accent }}>
                       {acting === vm.vmid ? '…' : 'Start'}
                     </button>
@@ -2142,6 +2187,14 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
                   <div>
                     <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
                     <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
+                    {d.tags && d.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {d.tags.map((tag) => (
+                          <span key={tag} className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                            style={{ background: `${accent}16`, color: accent }}>#{tag}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -2161,7 +2214,9 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
 
 function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus>; s: ShellTokens; cardSize: CardSize }) {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const cs = CARD_SIZE_CONFIG[cardSize];
+  const allTags = [...new Set(devices.flatMap((d) => d.tags ?? []))].sort();
 
   const doAction = async (device: Device, action: string) => {
     setActionStatus((prev) => ({ ...prev, [device.id]: '…' }));
@@ -2200,20 +2255,45 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
     );
   }
 
-  const rooms = [...new Set(devices.map((d) => d.room ?? 'Allgemein'))];
+  const shown = tagFilter ? devices.filter((d) => (d.tags ?? []).includes(tagFilter)) : devices;
+  const rooms = [...new Set(shown.map((d) => d.room ?? 'Allgemein'))];
 
   return (
     <div className="animate-slide-right space-y-6">
       <div>
         <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Geräte</h1>
-        <p className="text-[14px]" style={{ color: s.fgMuted }}>{devices.length} Gerät{devices.length !== 1 ? 'e' : ''} konfiguriert</p>
+        <p className="text-[14px]" style={{ color: s.fgMuted }}>{shown.length} von {devices.length} Gerät{devices.length !== 1 ? 'en' : ''}{tagFilter ? ` · #${tagFilter}` : ''}</p>
       </div>
+
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setTagFilter(null)}
+            className="rounded-full px-3 py-1.5 text-[12px] font-medium transition-all"
+            style={tagFilter === null
+              ? { background: accent, color: '#fff', boxShadow: `0 2px 8px ${accent}55` }
+              : { background: s.emptyBadge, color: s.fgMuted }}>
+            Alle
+          </button>
+          {allTags.map((tag) => {
+            const active = tagFilter === tag;
+            return (
+              <button key={tag} onClick={() => setTagFilter(active ? null : tag)}
+                className="rounded-full px-3 py-1.5 text-[12px] font-medium transition-all"
+                style={active
+                  ? { background: accent, color: '#fff', boxShadow: `0 2px 8px ${accent}55` }
+                  : { background: `${accent}14`, color: accent }}>
+                #{tag}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {rooms.map((room) => (
         <div key={room}>
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: s.fgFaint }}>{room}</p>
           <div className={`grid ${cs.grid} ${cs.gap}`}>
-            {devices.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => {
+            {shown.filter((d) => (d.room ?? 'Allgemein') === room).map((device, i) => {
               const st = statuses[device.id];
               return (
                 <div key={device.id}
@@ -2251,6 +2331,15 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
                   <div className="mb-4">
                     <p className={`${cs.name} font-semibold leading-tight`} style={{ color: s.fg }}>{device.name}</p>
                     <p className="text-[12px] mt-1" style={{ color: s.fgMuted }}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
+                    {device.tags && device.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {device.tags.map((tag) => (
+                          <button key={tag} onClick={() => setTagFilter(tag)}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-medium transition-transform hover:scale-105"
+                            style={{ background: `${accent}16`, color: accent }}>#{tag}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Action feedback */}

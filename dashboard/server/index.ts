@@ -129,11 +129,12 @@ type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxCo
 
 type DeviceType = DeviceConfig['type'];
 
-type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'view:rdp' | 'view:ssh' | 'control:http' | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
+type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'control:lxc' | 'view:rdp' | 'control:rdp' | 'view:ssh' | 'control:ssh' | 'view:console' | 'control:http' | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: PermissionFlag[] = [
   'control:plugs', 'control:lights', 'control:wol',
-  'view:proxmox', 'control:proxmox', 'view:rdp', 'view:ssh', 'control:http',
+  'view:proxmox', 'control:proxmox', 'control:lxc', 'view:console',
+  'view:rdp', 'control:rdp', 'view:ssh', 'control:ssh', 'control:http',
   'control:tasmota', 'view:docker', 'control:docker', 'view:tailscale',
 ];
 
@@ -143,6 +144,7 @@ type DeviceRecord = {
   type: DeviceType;           // always present — used for icons, filtering, permissions
   room?: string;
   icon?: string;
+  tags?: string[];            // free-form user labels for grouping/filtering
   config?: DeviceConfig;      // only in legacy mode (PI_AGENT_URL not set)
   requiredPermissions: PermissionFlag[];
 };
@@ -846,7 +848,7 @@ const hasPiAgent = () => Boolean(process.env.PI_AGENT_URL && process.env.PI_AGEN
 // Strips sensitive config before returning device to client.
 // In zero-knowledge mode the config is never stored on this server at all.
 const safeDevice = (d: DeviceRecord) => ({
-  id: d.id, name: d.name, type: d.type, room: d.room, icon: d.icon,
+  id: d.id, name: d.name, type: d.type, room: d.room, icon: d.icon, tags: d.tags ?? [],
   requiredPermissions: d.requiredPermissions,
 });
 
@@ -890,9 +892,10 @@ app.get('/api/devices/:id/config', async (req, res) => {
 
 app.post('/api/devices', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
   const id = crypto.randomBytes(12).toString('base64url');
+  const cleanTags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : undefined;
 
   if (hasPiAgent()) {
     // Zero-knowledge mode: push sensitive config to Pi Agent, store only metadata here
@@ -902,11 +905,11 @@ app.post('/api/devices', async (req, res) => {
     } catch (err) {
       return res.status(502).json({ error: `Pi Agent unreachable: ${(err as Error).message}` });
     }
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, requiredPermissions: requiredPermissions ?? [] };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, requiredPermissions: requiredPermissions ?? [] };
     devices.set(id, device);
   } else {
     // Legacy mode: store full config on dashboard
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, config, requiredPermissions: requiredPermissions ?? [] };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, config, requiredPermissions: requiredPermissions ?? [] };
     devices.set(id, device);
   }
 
@@ -918,10 +921,11 @@ app.patch('/api/devices/:id', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   const device = devices.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  const { name, room, icon, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (name !== undefined) device.name = name;
   if (room !== undefined) device.room = room;
   if (icon !== undefined) device.icon = icon;
+  if (tags !== undefined) device.tags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : [];
   if (requiredPermissions !== undefined) device.requiredPermissions = requiredPermissions;
   if (config !== undefined) {
     device.type = config.type;
@@ -1008,13 +1012,20 @@ app.post('/api/devices/:id/action', async (req, res) => {
       const node = cfg.node ?? 'pve';
       const headers: Record<string, string> = { Authorization: `PVEAPIToken=${cfg.tokenId}=${cfg.tokenSecret}` };
       if (action === 'list_vms') {
-        const r = await fetch(`${base}/nodes/${node}/qemu`, { headers, agent: agent as any } as any);
-        if (!r.ok) return res.status(502).json({ error: 'Proxmox API error', status: r.status });
-        return res.json(await r.json());
+        // List both KVM/QEMU VMs and LXC containers, tagged with their kind.
+        const [qemuR, lxcR] = await Promise.all([
+          fetch(`${base}/nodes/${node}/qemu`, { headers, agent: agent as any } as any),
+          fetch(`${base}/nodes/${node}/lxc`,  { headers, agent: agent as any } as any),
+        ]);
+        if (!qemuR.ok) return res.status(502).json({ error: 'Proxmox API error', status: qemuR.status });
+        const qemu = (((await qemuR.json()) as any).data ?? []).map((v: any) => ({ ...v, _kind: 'qemu' }));
+        const lxc = lxcR.ok ? (((await lxcR.json()) as any).data ?? []).map((v: any) => ({ ...v, _kind: 'lxc' })) : [];
+        return res.json({ data: [...qemu, ...lxc] });
       }
-      const { vmId, vmAction } = req.body as { vmId?: string; vmAction?: string };
+      const { vmId, vmAction, vmKind } = req.body as { vmId?: string; vmAction?: string; vmKind?: string };
       if (vmId && vmAction && ['start', 'stop', 'reboot', 'shutdown'].includes(vmAction)) {
-        const r = await fetch(`${base}/nodes/${node}/qemu/${vmId}/status/${vmAction}`, { method: 'POST', headers, agent: agent as any } as any);
+        const kind = vmKind === 'lxc' ? 'lxc' : 'qemu';
+        const r = await fetch(`${base}/nodes/${node}/${kind}/${vmId}/status/${vmAction}`, { method: 'POST', headers, agent: agent as any } as any);
         return res.json(await r.json());
       }
       return res.status(400).json({ error: 'Use action=list_vms or provide vmId+vmAction' });

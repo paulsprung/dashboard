@@ -83,16 +83,23 @@ export async function executeDeviceAction(
     const headers = { Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}` };
 
     if (action === 'list_vms') {
-      const r = await fetch(`${base}/nodes/${node}/qemu`, { headers, agent: agent as any } as any);
-      if (!r.ok) throw new Error(`Proxmox API error ${r.status}`);
-      return r.json();
+      // List both KVM/QEMU VMs and LXC containers, tagged with their kind.
+      const [qemuR, lxcR] = await Promise.all([
+        fetch(`${base}/nodes/${node}/qemu`, { headers, agent: agent as any } as any),
+        fetch(`${base}/nodes/${node}/lxc`,  { headers, agent: agent as any } as any),
+      ]);
+      if (!qemuR.ok) throw new Error(`Proxmox API error ${qemuR.status}`);
+      const qemu = (((await qemuR.json()) as any).data ?? []).map((v: any) => ({ ...v, _kind: 'qemu' }));
+      const lxc = lxcR.ok ? (((await lxcR.json()) as any).data ?? []).map((v: any) => ({ ...v, _kind: 'lxc' })) : [];
+      return { data: [...qemu, ...lxc] };
     }
     if (action === 'vm_ctrl') {
-      const { vmId, vmAction } = params as { vmId?: string; vmAction?: string };
+      const { vmId, vmAction, vmKind } = params as { vmId?: string; vmAction?: string; vmKind?: string };
+      const kind = vmKind === 'lxc' ? 'lxc' : 'qemu';
       if (!vmId || !vmAction || !['start', 'stop', 'reboot', 'shutdown'].includes(vmAction)) {
         throw new Error('Provide vmId and vmAction (start|stop|reboot|shutdown)');
       }
-      const r = await fetch(`${base}/nodes/${node}/qemu/${vmId}/status/${vmAction}`, {
+      const r = await fetch(`${base}/nodes/${node}/${kind}/${vmId}/status/${vmAction}`, {
         method: 'POST', headers, agent: agent as any,
       } as any);
       return r.json();
