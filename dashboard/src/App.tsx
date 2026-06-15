@@ -1032,13 +1032,13 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
       <div className="mt-auto flex gap-2">
         <button
           onClick={() => doAction('on')} disabled={loading}
-          className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${on === true ? 'text-white' : `${t.inputBg} ${t.text} opacity-60 hover:opacity-100`}`}
+          className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === true ? 'text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}
           style={on === true ? { backgroundColor: accent } : {}}>
           {loading ? <Spinner size={12} /> : 'Ein'}
         </button>
         <button
           onClick={() => doAction('off')} disabled={loading}
-          className={`flex-1 rounded-xl py-2 text-xs font-medium transition-all ${on === false ? 'bg-red-500/80 text-white' : `${t.inputBg} ${t.text} opacity-60 hover:opacity-100`}`}>
+          className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === false ? 'bg-red-500 text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}>
           {loading ? <Spinner size={12} /> : 'Aus'}
         </button>
       </div>
@@ -1867,11 +1867,12 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] =
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, devices, setDevices, widgets, setWidgets, t, s }: {
+function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, hiddenTabs, setHiddenTabs, devices, setDevices, widgets, setWidgets, t, s }: {
   user: SessionUser; theme: ThemeMode; setTheme: (t: ThemeMode) => void;
   accent: string; setAccent: (a: string) => void;
   cardSize: CardSize; setCardSize: (c: CardSize) => void;
   sidebarCompact: boolean; setSidebarCompact: (v: boolean) => void;
+  hiddenTabs: Tab[]; setHiddenTabs: (v: Tab[]) => void;
   devices: Device[]; setDevices: (d: Device[]) => void;
   widgets: Widget[]; setWidgets: (w: Widget[]) => void;
   t: ReturnType<typeof tok>; s: ShellTokens;
@@ -2006,6 +2007,32 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
             <p className="text-[12px]" style={{ color: s.fgMuted }}>Nur Symbole anzeigen, mehr Platz für Inhalte.</p>
           </div>
           <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Kompakte Seitenleiste" />
+        </div>
+      </section>
+
+      {/* Visibility */}
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
+        <div>
+          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Sichtbarkeit</h2>
+          <p className="mt-0.5 text-[12px]" style={{ color: s.fgMuted }}>Wähle, welche Bereiche in der Seitenleiste erscheinen.</p>
+        </div>
+        <div className="space-y-1">
+          {NAV.filter((n) => n.key !== 'home' && (!ADMIN_ONLY_TABS.includes(n.key) || canAdmin)).map((n) => {
+            const visible = !hiddenTabs.includes(n.key);
+            return (
+              <div key={n.key} className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-white"
+                    style={{ background: `linear-gradient(145deg, ${n.color}EE, ${n.color}BB)`, boxShadow: `0 2px 6px ${n.color}44` }}>
+                    {n.icon}
+                  </div>
+                  <span className="text-[14px] font-medium" style={{ color: s.fg }}>{n.label}</span>
+                </div>
+                <Toggle accent={accent} label={n.label} checked={visible}
+                  onChange={(v) => setHiddenTabs(v ? hiddenTabs.filter((k) => k !== n.key) : [...hiddenTabs, n.key])} />
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -2283,7 +2310,7 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
 
 // ── Admin tab ─────────────────────────────────────────────────────────────────
 
-function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) {
+function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens }) {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('user');
@@ -2356,7 +2383,7 @@ function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) 
       <h1 className={`text-xl font-semibold ${t.text}`}>Administration</h1>
 
       {/* Invite */}
-      <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div>
           <h2 className={`font-semibold ${t.text}`}>Nutzer einladen</h2>
           <p className={`mt-0.5 text-sm ${t.muted}`}>Generiere einen Einladungslink.</p>
@@ -2387,7 +2414,7 @@ function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) 
       </section>
 
       {/* Users + Permissions */}
-      <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <h2 className={`font-semibold ${t.text}`}>Nutzer & Berechtigungen</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {/* User list */}
@@ -2439,7 +2466,7 @@ function AdminTab({ t, accent }: { t: ReturnType<typeof tok>; accent: string }) 
       </section>
 
       {/* Activity log (from Pi Agent) */}
-      <section className={`rounded-2xl border p-5 space-y-4 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div className="flex items-center justify-between">
           <div>
             <h2 className={`font-semibold ${t.text}`}>Aktivitätsprotokoll</h2>
@@ -2492,9 +2519,9 @@ type HostAgentInfo = {
   services: string[]; registeredAt: number; lastSeen: number; online: boolean;
 };
 
-function DiscoveryTab({ devices, setDevices, t, accent }: {
+function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   devices: Device[]; setDevices: (d: Device[]) => void;
-  t: ReturnType<typeof tok>; accent: string;
+  t: ReturnType<typeof tok>; accent: string; s: ShellTokens;
 }) {
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [agents, setAgents] = useState<HostAgentInfo[]>([]);
@@ -2578,7 +2605,7 @@ function DiscoveryTab({ devices, setDevices, t, accent }: {
       {status && <StatusMsg msg={status} t={t} />}
 
       {!configured ? (
-        <div className={`rounded-2xl border p-12 text-center ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+        <div className={`${s.glassSubtle} rounded-[22px] p-12 text-center`} style={{ boxShadow: s.cardShadow }}>
           <p className="text-4xl mb-3">◎</p>
           <p className={`font-medium ${t.text}`}>Kein Pi Agent konfiguriert</p>
           <p className={`mt-1 text-sm ${t.muted}`}>Setze <code>PI_AGENT_URL</code> in der Dashboard-Konfiguration, um Discovery zu nutzen.</p>
@@ -2586,7 +2613,7 @@ function DiscoveryTab({ devices, setDevices, t, accent }: {
       ) : (
         <>
           {/* Discovered devices */}
-          <section className={`rounded-2xl border p-5 space-y-3 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <div className="flex items-center justify-between">
               <h2 className={`font-semibold ${t.text}`}>Gefundene Geräte</h2>
               <span className={`text-xs ${t.muted}`}>
@@ -2625,7 +2652,7 @@ function DiscoveryTab({ devices, setDevices, t, accent }: {
           </section>
 
           {/* Host agents */}
-          <section className={`rounded-2xl border p-5 space-y-3 ${t.border} ${t.inputBg}`} style={panelStyle(accent, t)}>
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <h2 className={`font-semibold ${t.text}`}>Host-Agents</h2>
             <p className={`text-sm ${t.muted}`}>Server, die sich selbst beim Pi Agent melden (z. B. Proxmox, Docker-Hosts).</p>
             {agents.length === 0 ? (
@@ -2678,6 +2705,7 @@ function Dashboard({ user, setup, onSignOut }: {
   const [accent, setAccentRaw] = usePref<string>('ui.accent', setup.accent);
   const [cardSize, setCardSize] = usePref<CardSize>('ui.cardSize', 'standard');
   const [sidebarCompact, setSidebarCompact] = usePref<boolean>('ui.sidebarCompact', false);
+  const [hiddenTabs, setHiddenTabs] = usePref<Tab[]>('ui.hiddenTabs', []);
   const setTheme = (m: ThemeMode) => setThemeRaw(m);
   const setAccent = (a: string) => setAccentRaw(a);
   const t = tok(theme);
@@ -2691,7 +2719,7 @@ function Dashboard({ user, setup, onSignOut }: {
   const [showAddWidget, setShowAddWidget] = useState(false);
 
   const canAdmin = user.role === 'root' || user.role === 'admin';
-  const visibleNav = NAV.filter((n) => !ADMIN_ONLY_TABS.includes(n.key) || canAdmin);
+  const visibleNav = NAV.filter((n) => (!ADMIN_ONLY_TABS.includes(n.key) || canAdmin) && !hiddenTabs.includes(n.key));
 
   useEffect(() => {
     void fetch('/api/devices', { credentials: 'include' })
@@ -3009,6 +3037,7 @@ function Dashboard({ user, setup, onSignOut }: {
               accent={accent} setAccent={setAccent}
               cardSize={cardSize} setCardSize={setCardSize}
               sidebarCompact={sidebarCompact} setSidebarCompact={setSidebarCompact}
+              hiddenTabs={hiddenTabs} setHiddenTabs={setHiddenTabs}
               devices={devices} setDevices={setDevices}
               widgets={widgets} setWidgets={setWidgets}
               t={t} s={s}
@@ -3016,11 +3045,11 @@ function Dashboard({ user, setup, onSignOut }: {
           )}
 
           {tab === 'discovery' && canAdmin && (
-            <DiscoveryTab devices={devices} setDevices={setDevices} t={t} accent={accent} />
+            <DiscoveryTab devices={devices} setDevices={setDevices} t={t} accent={accent} s={s} />
           )}
 
           {tab === 'admin' && canAdmin && (
-            <AdminTab t={t} accent={accent} />
+            <AdminTab t={t} accent={accent} s={s} />
           )}
 
         </div>{/* end key={tab} wrapper */}
