@@ -19,22 +19,22 @@ type PermissionFlag =
   | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
 
 const ALL_PERMISSIONS: { flag: PermissionFlag; label: string; desc: string }[] = [
-  { flag: 'control:plugs',    label: 'Steckdosen',      desc: 'Smart Plugs ein/ausschalten' },
-  { flag: 'control:lights',   label: 'Licht',            desc: 'Lichter steuern' },
-  { flag: 'control:wol',      label: 'Wake-on-LAN',      desc: 'Geräte per WOL aufwecken' },
-  { flag: 'view:proxmox',     label: 'Proxmox (lesen)',  desc: 'VMs & Container einsehen' },
-  { flag: 'control:proxmox',  label: 'Proxmox VMs',      desc: 'KVM-VMs starten/stoppen' },
-  { flag: 'control:lxc',      label: 'LXC-Container',    desc: 'LXC-Container starten/stoppen' },
-  { flag: 'view:console',     label: 'Konsole/Remote',   desc: 'Web-Konsole & Remote-Sessions öffnen' },
-  { flag: 'view:rdp',         label: 'RDP anzeigen',     desc: 'RDP-Verbindungsdaten sehen' },
-  { flag: 'control:rdp',      label: 'RDP-Session',      desc: 'RDP-Session starten' },
-  { flag: 'view:ssh',         label: 'SSH anzeigen',     desc: 'SSH-Verbindungsdaten sehen' },
-  { flag: 'control:ssh',      label: 'SSH-Session',      desc: 'SSH-Session starten' },
-  { flag: 'control:http',     label: 'HTTP-Geräte',      desc: 'HTTP-Gerätebefehle senden' },
-  { flag: 'control:tasmota',  label: 'Tasmota-Geräte',   desc: 'Tasmota Steckdosen steuern' },
-  { flag: 'view:docker',      label: 'Docker (lesen)',   desc: 'Container-Status einsehen' },
-  { flag: 'control:docker',   label: 'Docker (ctrl)',    desc: 'Container starten/stoppen' },
-  { flag: 'view:tailscale',   label: 'Tailscale',        desc: 'Netzwerk-Peers einsehen' },
+  { flag: 'control:plugs',    label: 'Power outlets',   desc: 'Turn smart plugs on/off' },
+  { flag: 'control:lights',   label: 'Lights',          desc: 'Control lights' },
+  { flag: 'control:wol',      label: 'Wake-on-LAN',      desc: 'Wake devices via WOL' },
+  { flag: 'view:proxmox',     label: 'Proxmox (read)',  desc: 'View VMs & containers' },
+  { flag: 'control:proxmox',  label: 'Proxmox VMs',      desc: 'Start/stop KVM VMs' },
+  { flag: 'control:lxc',      label: 'LXC containers',  desc: 'Start/stop LXC containers' },
+  { flag: 'view:console',     label: 'Console/Remote',  desc: 'Open web console & remote sessions' },
+  { flag: 'view:rdp',         label: 'Show RDP',        desc: 'View RDP connection details' },
+  { flag: 'control:rdp',      label: 'RDP session',     desc: 'Start RDP session' },
+  { flag: 'view:ssh',         label: 'Show SSH',        desc: 'View SSH connection details' },
+  { flag: 'control:ssh',      label: 'SSH session',     desc: 'Start SSH session' },
+  { flag: 'control:http',     label: 'HTTP devices',    desc: 'Send HTTP device commands' },
+  { flag: 'control:tasmota',  label: 'Tasmota devices', desc: 'Control Tasmota plugs' },
+  { flag: 'view:docker',      label: 'Docker (read)',   desc: 'View container status' },
+  { flag: 'control:docker',   label: 'Docker (control)',desc: 'Start/stop containers' },
+  { flag: 'view:tailscale',   label: 'Tailscale',        desc: 'View network peers' },
 ];
 
 type DeviceConfig =
@@ -235,9 +235,9 @@ type CardSize = 'compact' | 'standard' | 'large';
 const CARD_SIZE_CONFIG: Record<CardSize, {
   label: string; grid: string; pad: string; iconBox: string; gap: string; name: string;
 }> = {
-  compact:  { label: 'Kompakt',  grid: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4', pad: 'p-4',  gap: 'gap-3', iconBox: 'h-[42px] w-[42px] rounded-[13px] text-[20px]', name: 'text-[14px]' },
+  compact:  { label: 'Compact',  grid: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4', pad: 'p-4',  gap: 'gap-3', iconBox: 'h-[42px] w-[42px] rounded-[13px] text-[20px]', name: 'text-[14px]' },
   standard: { label: 'Standard', grid: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3', pad: 'p-5',  gap: 'gap-3', iconBox: 'h-[54px] w-[54px] rounded-[16px] text-[26px]', name: 'text-[15px]' },
-  large:    { label: 'Groß',     grid: 'grid-cols-1 sm:grid-cols-1 lg:grid-cols-2', pad: 'p-7',  gap: 'gap-4', iconBox: 'h-[64px] w-[64px] rounded-[19px] text-[32px]', name: 'text-[17px]' },
+  large:    { label: 'Large',     grid: 'grid-cols-1 sm:grid-cols-1 lg:grid-cols-2', pad: 'p-7',  gap: 'gap-4', iconBox: 'h-[64px] w-[64px] rounded-[19px] text-[32px]', name: 'text-[17px]' },
 };
 
 // Persisted UI preference backed by localStorage.
@@ -566,19 +566,28 @@ const readErr = async (r: Response, fallback: string) => {
   try { return ((await r.json()) as { error?: string }).error ?? fallback; } catch { return fallback; }
 };
 
+// Human-readable uptime from seconds (e.g. "3d 4h", "12m").
+function formatUptime(s?: number): string {
+  if (!s || s < 0) return '–';
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 // ── Device helpers ────────────────────────────────────────────────────────────
 
 const DEVICE_TYPE_OPTIONS = [
   { value: 'shelly_plug',  label: '🔌 Smart Plug (Shelly)' },
-  { value: 'shelly_light', label: '💡 Licht (Shelly)' },
-  { value: 'tasmota',      label: '🔌 Tasmota Gerät (NOUS, Sonoff…)' },
+  { value: 'shelly_light', label: '💡 Light (Shelly)' },
+  { value: 'tasmota',      label: '🔌 Tasmota device (NOUS, Sonoff…)' },
   { value: 'wol',          label: '⚡ Wake-on-LAN' },
   { value: 'proxmox',      label: '🖥  Proxmox Server' },
   { value: 'docker',       label: '🐳 Docker Host' },
   { value: 'rdp',          label: '🪟 Windows RDP' },
   { value: 'ssh',          label: '🐧 SSH / Linux' },
-  { value: 'tailscale',    label: '🔒 Tailscale Netzwerk' },
-  { value: 'http',         label: '🌐 HTTP Gerät' },
+  { value: 'tailscale',    label: '🔒 Tailscale network' },
+  { value: 'http',         label: '🌐 HTTP device' },
 ];
 
 const deviceTypeIcon = (type: string) => {
@@ -707,12 +716,12 @@ function DeviceForm({
     <div className="space-y-4">
       {configLoading && (
         <div className={`flex items-center gap-2 text-sm ${t.muted}`}>
-          <Spinner size={14} /> Konfiguration wird geladen…
+          <Spinner size={14} /> Loading configuration…
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Input label="Name" value={name} onChange={setName} placeholder="Wohnzimmer Steckdose" t={t} accent={accent} autoFocus />
-        <Input label="Raum (optional)" value={room} onChange={setRoom} placeholder="Wohnzimmer" t={t} accent={accent} />
+        <Input label="Name" value={name} onChange={setName} placeholder="Living room outlet" t={t} accent={accent} autoFocus />
+        <Input label="Room (optional)" value={room} onChange={setRoom} placeholder="Living room" t={t} accent={accent} />
       </div>
       <Select label="Typ" value={type} onChange={setType}
         options={DEVICE_TYPE_OPTIONS} t={t} accent={accent} />
@@ -720,7 +729,7 @@ function DeviceForm({
       {(type === 'shelly_plug' || type === 'shelly_light') && (
         <div className="grid grid-cols-2 gap-3">
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.100" t={t} accent={accent} />
-          <Input label="Kanal" value={channel} onChange={setChannel} placeholder="0" t={t} accent={accent} />
+          <Input label="Channel" value={channel} onChange={setChannel} placeholder="0" t={t} accent={accent} />
         </div>
       )}
       {type === 'wol' && (
@@ -743,7 +752,7 @@ function DeviceForm({
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={allowSelfSigned} onChange={(e) => setAllowSelfSigned(e.target.checked)}
               className="rounded" />
-            <span className={`text-sm ${t.muted}`}>Self-signed Zertifikat erlauben</span>
+            <span className={`text-sm ${t.muted}`}>Allow self-signed certificate</span>
           </label>
         </div>
       )}
@@ -751,31 +760,31 @@ function DeviceForm({
         <div className="grid grid-cols-2 gap-3">
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.50" t={t} accent={accent} />
           <Input label="Port (opt.)" value={port} onChange={setPort} placeholder={type === 'rdp' ? '3389' : '22'} t={t} accent={accent} />
-          <Input label="Benutzername (opt.)" value={username} onChange={setUsername} placeholder="admin" t={t} accent={accent} />
+          <Input label="Username (opt.)" value={username} onChange={setUsername} placeholder="admin" t={t} accent={accent} />
         </div>
       )}
       {type === 'http' && (
         <div className="space-y-3">
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.200" t={t} accent={accent} />
-          <Input label="Pfad EIN" value={onPath} onChange={setOnPath} placeholder="/relay/0?turn=on" t={t} accent={accent} />
-          <Input label="Pfad AUS (opt.)" value={offPath} onChange={setOffPath} placeholder="/relay/0?turn=off" t={t} accent={accent} />
+          <Input label="Path ON" value={onPath} onChange={setOnPath} placeholder="/relay/0?turn=on" t={t} accent={accent} />
+          <Input label="Path OFF (opt.)" value={offPath} onChange={setOffPath} placeholder="/relay/0?turn=off" t={t} accent={accent} />
         </div>
       )}
       {type === 'tasmota' && (
         <div className="grid grid-cols-2 gap-3">
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.100" t={t} accent={accent} />
-          <Input label="Anzahl Kanäle" value={tasmotaChannels} onChange={setTasmotaChannels} placeholder="1" t={t} accent={accent} hint="1 = Einzel-Plug, 4 = Mehrfachstecker" />
+          <Input label="Number of channels" value={tasmotaChannels} onChange={setTasmotaChannels} placeholder="1" t={t} accent={accent} hint="1 = single plug, 4 = power strip" />
         </div>
       )}
       {type === 'docker' && (
         <div className="grid grid-cols-2 gap-3">
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.10" t={t} accent={accent} />
-          <Input label="Port (opt.)" value={dockerPort} onChange={setDockerPort} placeholder="2375" t={t} accent={accent} hint="Docker TCP API aktivieren: dockerd -H tcp://0.0.0.0:2375" />
+          <Input label="Port (opt.)" value={dockerPort} onChange={setDockerPort} placeholder="2375" t={t} accent={accent} hint="Enable Docker TCP API: dockerd -H tcp://0.0.0.0:2375" />
         </div>
       )}
       {type === 'tailscale' && (
         <div className="space-y-3">
-          <Input label="API Key" value={tailscaleApiKey} onChange={setTailscaleApiKey} placeholder="tskey-api-..." t={t} accent={accent} hint="Erstelle unter tailscale.com/admin/settings/keys" />
+          <Input label="API Key" value={tailscaleApiKey} onChange={setTailscaleApiKey} placeholder="tskey-api-..." t={t} accent={accent} hint="Create at tailscale.com/admin/settings/keys" />
           <Input label="Tailnet" value={tailscaleTailnet} onChange={setTailscaleTailnet} placeholder="deine-organisation.ts.net" t={t} accent={accent} />
         </div>
       )}
@@ -799,15 +808,15 @@ function DeviceForm({
               else if (e.key === 'Backspace' && !tagDraft && tags.length) setTags(tags.slice(0, -1));
             }}
             onBlur={() => tagDraft && addTag(tagDraft)}
-            placeholder={tags.length ? 'Tag…' : 'z. B. gameserver, kritisch, gast'}
+            placeholder={tags.length ? 'Tag…' : 'e.g. gameserver, critical, guest'}
             className={`flex-1 min-w-[100px] bg-transparent text-sm outline-none ${t.inputText}`}
           />
         </div>
-        <p className={`text-xs ${t.muted}`}>Mit Enter oder Komma bestätigen. Tags helfen beim Gruppieren und Filtern auf dem Geräte-Tab.</p>
+        <p className={`text-xs ${t.muted}`}>Confirm with Enter or comma. Tags help group and filter on the Devices tab.</p>
       </div>
 
       <div className="space-y-2">
-        <label className={`block text-sm font-medium ${t.muted}`}>Berechtigungen (wer darf dieses Gerät sehen)</label>
+        <label className={`block text-sm font-medium ${t.muted}`}>Permissions (who can see this device)</label>
         <div className="grid grid-cols-2 gap-1.5">
           {ALL_PERMISSIONS.map(({ flag, label }) => (
             <label key={flag} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm transition-all ${t.inputBg} ${t.navHover}`}>
@@ -821,9 +830,9 @@ function DeviceForm({
       <div className="flex gap-2 pt-1">
         <Btn accent={accent} className="flex-1" onClick={save} loading={loading}
           disabled={!name || (type === 'wol' && !mac) || (type === 'tailscale' && (!tailscaleApiKey || !tailscaleTailnet)) || (!ip && !['wol','tailscale'].includes(type))}>
-          Speichern
+          Save
         </Btn>
-        <Btn accent={accent} variant="secondary" onClick={onCancel}>Abbrechen</Btn>
+        <Btn accent={accent} variant="secondary" onClick={onCancel}>Cancel</Btn>
       </div>
     </div>
   );
@@ -832,16 +841,16 @@ function DeviceForm({
 // ── Widget Form (add widget) ──────────────────────────────────────────────────
 
 const WIDGET_TYPE_OPTIONS = [
-  { value: 'clock',               label: '🕐 Uhr' },
-  { value: 'weather',             label: '🌤 Wetter' },
-  { value: 'device_toggle',       label: '🔌 Gerät schalten' },
+  { value: 'clock',               label: '🕐 Clock' },
+  { value: 'weather',             label: '🌤 Weather' },
+  { value: 'device_toggle',       label: '🔌 Toggle device' },
   { value: 'wol_button',          label: '⚡ Wake-on-LAN' },
   { value: 'proxmox_vms',         label: '🖥  Proxmox VMs' },
-  { value: 'energy',              label: '⚡ Energie (Tasmota)' },
+  { value: 'energy',              label: '⚡ Energy (Tasmota)' },
   { value: 'docker_containers',   label: '🐳 Docker Container' },
   { value: 'tailscale_peers',     label: '🔒 Tailscale Peers' },
   { value: 'monitor',             label: '📡 Service Monitor' },
-  { value: 'note',                label: '📝 Notiz' },
+  { value: 'note',                label: '📝 Note' },
 ];
 
 const WIDGET_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
@@ -918,25 +927,25 @@ function WidgetForm({
         </div>
       )}
       {wtype === 'weather' && (
-        <Input label="Ort (opt.)" value={location} onChange={setLocation} placeholder="Berlin" t={t} accent={accent} />
+        <Input label="Location (opt.)" value={location} onChange={setLocation} placeholder="Berlin" t={t} accent={accent} />
       )}
       {(wtype === 'device_toggle' || wtype === 'proxmox_vms') && (
         deviceOptions.length > 0
-          ? <Select label="Gerät" value={deviceId} onChange={setDeviceId} options={deviceOptions} t={t} accent={accent} />
-          : <p className={`text-sm ${t.muted}`}>Keine Geräte vorhanden. Zuerst in den Einstellungen Geräte hinzufügen.</p>
+          ? <Select label="Device" value={deviceId} onChange={setDeviceId} options={deviceOptions} t={t} accent={accent} />
+          : <p className={`text-sm ${t.muted}`}>No devices yet. Add devices in Settings first.</p>
       )}
       {wtype === 'wol_button' && (
         <div className="space-y-3">
           {deviceOptions.length > 0
-            ? <Select label="Gerät" value={deviceId} onChange={setDeviceId}
+            ? <Select label="Device" value={deviceId} onChange={setDeviceId}
                 options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'wol')}
                 t={t} accent={accent} />
-            : <p className={`text-sm ${t.muted}`}>Kein WOL-Gerät vorhanden.</p>}
-          <Input label="Beschriftung (opt.)" value={wolLabel} onChange={setWolLabel} placeholder="Server aufwecken" t={t} accent={accent} />
+            : <p className={`text-sm ${t.muted}`}>No WOL device available.</p>}
+          <Input label="Label (opt.)" value={wolLabel} onChange={setWolLabel} placeholder="Wake server" t={t} accent={accent} />
         </div>
       )}
       {(wtype === 'energy') && (
-        <Select label="Tasmota-Gerät" value={deviceId} onChange={setDeviceId}
+        <Select label="Tasmota device" value={deviceId} onChange={setDeviceId}
           options={deviceOptions.filter((d) => devices.find((dev) => dev.id === d.value)?.type === 'tasmota')}
           t={t} accent={accent} />
       )}
@@ -951,16 +960,16 @@ function WidgetForm({
           t={t} accent={accent} />
       )}
       {wtype === 'monitor' && (
-        <p className={`text-sm ${t.muted}`}>Zeigt den Status aller erreichbaren Geräte.</p>
+        <p className={`text-sm ${t.muted}`}>Shows the status of all reachable devices.</p>
       )}
       {wtype === 'note' && (
         <div className="space-y-3">
-          <Input label="Titel (opt.)" value={noteTitle} onChange={setNoteTitle} placeholder="Notiz" t={t} accent={accent} />
+          <Input label="Title (opt.)" value={noteTitle} onChange={setNoteTitle} placeholder="Note" t={t} accent={accent} />
           <div className="space-y-1.5">
             <label className={`block text-sm font-medium ${t.muted}`}>Inhalt</label>
             <textarea
               value={noteContent} onChange={(e) => setNoteContent(e.target.value)}
-              rows={3} placeholder="Deine Notiz…"
+              rows={3} placeholder="Your note…"
               className={`focus-accent w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-all resize-none
                 ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
               style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}
@@ -970,8 +979,8 @@ function WidgetForm({
       )}
 
       <div className="flex gap-2 pt-1">
-        <Btn accent={accent} className="flex-1" onClick={save} loading={loading}>Widget hinzufügen</Btn>
-        <Btn accent={accent} variant="secondary" onClick={onCancel}>Abbrechen</Btn>
+        <Btn accent={accent} className="flex-1" onClick={save} loading={loading}>Add widget</Btn>
+        <Btn accent={accent} variant="secondary" onClick={onCancel}>Cancel</Btn>
       </div>
     </div>
   );
@@ -1004,7 +1013,7 @@ function ClockWidget({ config, t, accent }: { config: Extract<WidgetConfig, { ty
       <p className="text-4xl font-thin tabular-nums tracking-tight" style={{ color: accent }}>{fmt(now)}</p>
       {config.showDate !== false && (
         <p className={`text-xs ${t.muted}`}>
-          {now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       )}
     </div>
@@ -1015,8 +1024,8 @@ function WeatherWidget({ config, t, accent }: { config: Extract<WidgetConfig, { 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
       <span className="text-5xl">🌤</span>
-      <p className={`text-sm font-medium ${t.text}`}>{config.location ?? 'Aktueller Standort'}</p>
-      <p className={`text-xs ${t.muted}`}>Wetter-API nicht konfiguriert</p>
+      <p className={`text-sm font-medium ${t.text}`}>{config.location ?? 'Current location'}</p>
+      <p className={`text-xs ${t.muted}`}>Weather API not configured</p>
     </div>
   );
 }
@@ -1045,13 +1054,13 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
         else if (action === 'off') setOn(false);
         setStatus(null);
       } else {
-        setStatus('Fehler');
+        setStatus('Error');
       }
     } catch { setStatus('Netzwerkfehler'); }
     setLoading(false);
   };
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -1065,7 +1074,7 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
       {on !== null && (
         <div className="flex items-center gap-1.5">
           <div className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className={`text-xs ${t.muted}`}>{on ? 'Ein' : 'Aus'}</span>
+          <span className={`text-xs ${t.muted}`}>{on ? 'On' : 'Off'}</span>
         </div>
       )}
       {status && <p className="text-xs text-red-500">{status}</p>}
@@ -1074,12 +1083,12 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
           onClick={() => doAction('on')} disabled={loading}
           className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === true ? 'text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}
           style={on === true ? { backgroundColor: accent } : {}}>
-          {loading ? <Spinner size={12} /> : 'Ein'}
+          {loading ? <Spinner size={12} /> : 'On'}
         </button>
         <button
           onClick={() => doAction('off')} disabled={loading}
           className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === false ? 'bg-red-500 text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}>
-          {loading ? <Spinner size={12} /> : 'Aus'}
+          {loading ? <Spinner size={12} /> : 'Off'}
         </button>
       </div>
     </div>
@@ -1108,7 +1117,7 @@ function WolButtonWidget({ config, devices, t, accent }: {
     setLoading(false);
   };
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3">
@@ -1158,7 +1167,7 @@ function EnergyWidget({ config, devices, t, accent }: {
 
   useEffect(() => { void load(); }, [config.deviceId]);
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
   const sns = data?.StatusSNS?.ENERGY;
 
   return (
@@ -1207,7 +1216,7 @@ function DockerWidget({ config, devices, t, accent }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ action: 'list_containers' }),
       });
-      if (!r.ok) { setErr('Docker API Fehler'); } else { setContainers(await r.json()); }
+      if (!r.ok) { setErr('Docker API error'); } else { setContainers(await r.json()); }
     } catch { setErr('Netzwerkfehler'); }
     setLoading(false);
   };
@@ -1224,7 +1233,7 @@ function DockerWidget({ config, devices, t, accent }: {
 
   useEffect(() => { void load(); }, [config.deviceId]);
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -1291,7 +1300,7 @@ function TailscaleWidget({ config, devices, t, accent }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ action: 'list_devices' }),
       });
-      if (!r.ok) { setErr('Tailscale API Fehler'); }
+      if (!r.ok) { setErr('Tailscale API error'); }
       else {
         const data = await r.json() as any;
         setPeers((data.devices ?? []).slice(0, 12));
@@ -1302,7 +1311,7 @@ function TailscaleWidget({ config, devices, t, accent }: {
 
   useEffect(() => { void load(); }, [config.deviceId]);
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -1348,7 +1357,7 @@ function MonitorWidget({ devices, t, accent, statuses }: {
     <div className="flex h-full flex-col gap-2">
       <p className={`text-sm font-medium ${t.text}`}>Service Monitor</p>
       <div className="flex flex-col gap-1 overflow-auto">
-        {monitorable.length === 0 && <p className={`text-xs ${t.muted}`}>Keine überwachbaren Geräte</p>}
+        {monitorable.length === 0 && <p className={`text-xs ${t.muted}`}>No monitorable devices</p>}
         {monitorable.map((d) => {
           const s = statuses[d.id];
           const online = s?.online;
@@ -1399,7 +1408,7 @@ function ProxmoxVmsWidget({ config, devices, t, accent }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ action: 'list_vms' }),
       });
-      if (!r.ok) { setErr('Proxmox API Fehler'); }
+      if (!r.ok) { setErr('Proxmox API error'); }
       else { setVms((await r.json() as any).data ?? []); }
     } catch { setErr('Netzwerkfehler'); }
     setLoading(false);
@@ -1417,7 +1426,7 @@ function ProxmoxVmsWidget({ config, devices, t, accent }: {
 
   useEffect(() => { void load(); }, [config.deviceId]);
 
-  if (!device) return <p className={`text-xs ${t.muted}`}>Gerät nicht gefunden</p>;
+  if (!device) return <p className={`text-xs ${t.muted}`}>Device not found</p>;
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -1489,7 +1498,7 @@ function WidgetRenderer({ widget, devices, t, accent, onRemove, statuses = {} }:
     <div className={`group relative h-full rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-px ${t.inputBg} ${t.border}`}
       style={panelStyle(accent, t)}>
       {onRemove && (
-        <button onClick={onRemove} aria-label="Widget entfernen"
+        <button onClick={onRemove} aria-label="Remove widget"
           className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow-lg z-30 hover:scale-110 transition-transform">
           ×
         </button>
@@ -1529,22 +1538,22 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
 
   const run = async (fn: () => Promise<void>) => {
     setLoading(true); setStatus('');
-    try { await fn(); } catch { setStatus('✗ Ein unerwarteter Fehler ist aufgetreten.'); }
+    try { await fn(); } catch { setStatus('✗ An unexpected error occurred.'); }
     setLoading(false);
   };
 
   const startSetup = () => run(async () => {
     const r = await fetch('/api/setup/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rootEmail: email }) });
-    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler beim Starten')}`);
+    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Failed to start')}`);
     go(2);
   });
 
   const registerPasskey = () => run(async () => {
     const opts = await fetch('/api/setup/root/registration-options', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-    if (!opts.ok) return setStatus(`✗ ${await readErr(opts, 'Optionen konnten nicht geladen werden')}`);
+    if (!opts.ok) return setStatus(`✗ ${await readErr(opts, 'Could not load options')}`);
     const reg = await startRegistration({ optionsJSON: await opts.json() });
     const verify = await fetch('/api/setup/root/verify-registration', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, registrationResponse: reg }) });
-    if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Registrierung fehlgeschlagen')}`);
+    if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Registration failed')}`);
     go(3);
   });
 
@@ -1552,7 +1561,7 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
     setBackupLoading(true);
     try {
       const r = await fetch('/api/setup/generate-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-      if (!r.ok) setStatus(`✗ ${await readErr(r, 'Fehler beim Generieren')}`);
+      if (!r.ok) setStatus(`✗ ${await readErr(r, 'Failed to generate')}`);
       else setBackupPassword((await r.json() as { rootBackupPassword: string }).rootBackupPassword);
     } catch { setStatus('✗ Netzwerkfehler.'); }
     setBackupLoading(false);
@@ -1562,13 +1571,13 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
 
   const confirmBackup = () => run(async () => {
     const r = await fetch('/api/setup/acknowledge-backup-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accepted: true }) });
-    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler')}`);
+    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Error')}`);
     go(4);
   });
 
   const finish = () => run(async () => {
     const r = await fetch('/api/setup/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, dashboardName, theme, accent }) });
-    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Fehler beim Abschließen')}`);
+    if (!r.ok) return setStatus(`✗ ${await readErr(r, 'Failed to complete')}`);
     setDone(true);
     setTimeout(onDone, 1800);
   });
@@ -1613,34 +1622,34 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
               <div className="flex flex-col items-center gap-4 py-4">
                 <SuccessCheck color={accent} />
                 <div className="text-center">
-                  <p className={`font-semibold ${t.text}`}>Einrichtung abgeschlossen</p>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Du wirst weitergeleitet…</p>
+                  <p className={`font-semibold ${t.text}`}>Setup complete</p>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Redirecting…</p>
                 </div>
               </div>
             ) : step === 1 ? (
               <div className="space-y-5">
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Root-Konto anlegen</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deine E-Mail-Adresse ein. Sie wird als Administrator-Konto verwendet.</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Create root account</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Enter your email address. It will be used as the administrator account.</p>
                 </div>
-                <Input label="E-Mail" value={email} onChange={setEmail}
-                  placeholder="du@beispiel.de" type="email" t={t} accent={accent} autoFocus />
+                <Input label="Email" value={email} onChange={setEmail}
+                  placeholder="you@example.com" type="email" t={t} accent={accent} autoFocus />
                 <StatusMsg msg={status} t={t} />
                 <Btn accent={accent} className="w-full" onClick={startSetup} loading={loading}
-                  disabled={!email.includes('@')}>Weiter</Btn>
+                  disabled={!email.includes('@')}>Continue</Btn>
               </div>
             ) : step === 2 ? (
               <div className="space-y-5">
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Passkey registrieren</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Dein Gerät generiert einen sicheren Schlüssel. Keine Passwörter nötig.</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Register passkey</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Your device generates a secure key. No passwords needed.</p>
                 </div>
                 <button onClick={() => go(1)}
                   className={`flex w-full items-center gap-3 rounded-xl p-4 text-left transition-all ${t.inputBg} ${t.navHover}`}>
                   <span className="text-base">📧</span>
                   <div>
                     <p className={`text-sm font-medium ${t.text}`}>{email}</p>
-                    <p className={`text-xs ${t.muted}`}>Tippe zum Ändern</p>
+                    <p className={`text-xs ${t.muted}`}>Tap to change</p>
                   </div>
                 </button>
                 <StatusMsg msg={status} t={t} />
@@ -1651,34 +1660,34 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
             ) : step === 3 ? (
               <div className="space-y-5">
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Backup-Code sichern</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Bewahre diesen Code sicher auf. Er ist dein einziger Weg ins Dashboard, falls du deinen Passkey verlierst.</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Save backup code</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Keep this code safe. It is your only way into the dashboard if you lose your passkey.</p>
                 </div>
                 {backupLoading ? (
                   <div className="flex items-center justify-center py-8"><Spinner size={24} color={accent} /></div>
                 ) : backupPassword ? (
                   <div className="space-y-4">
                     <div className={`rounded-xl border p-4 space-y-2 ${t.inputBg} ${t.border}`}>
-                      <p className={`text-xs font-medium ${t.muted}`}>Backup-Code — wird nur einmal angezeigt</p>
+                      <p className={`text-xs font-medium ${t.muted}`}>Backup code — shown only once</p>
                       <p className="font-mono text-base tracking-widest break-all select-all leading-relaxed" style={{ color: accent }}>
                         {backupPassword}
                       </p>
                     </div>
                     <div className={`rounded-xl p-3 text-xs ${t.muted} space-y-1`} style={{ backgroundColor: `${accent}12` }}>
-                      <p style={{ color: accent }} className="font-medium">So aufbewahren:</p>
-                      <p>• Passwortmanager (empfohlen)</p>
-                      <p>• Sicher ausgedruckt und eingeschlossen</p>
-                      <p>• Verschlüsseltes Notizdokument</p>
+                      <p style={{ color: accent }} className="font-medium">How to store it:</p>
+                      <p>• Password manager (recommended)</p>
+                      <p>• Printed and locked away safely</p>
+                      <p>• Encrypted note document</p>
                     </div>
                     <Btn accent={accent} className="w-full" onClick={confirmBackup} loading={loading}>
-                      Ich habe den Code gesichert
+                      I have saved the code
                     </Btn>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <StatusMsg msg={status} t={t} />
                     <Btn accent={accent} className="w-full" onClick={() => void generateBackup()} loading={backupLoading}>
-                      Erneut versuchen
+                      Try again
                     </Btn>
                   </div>
                 )}
@@ -1687,13 +1696,13 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
             ) : step === 4 ? (
               <div className="space-y-5">
                 <div>
-                  <h2 className={`text-lg font-semibold ${t.text}`}>Dashboard anpassen</h2>
-                  <p className={`mt-1 text-sm ${t.muted}`}>Gib deinem Dashboard einen Namen und wähle das Erscheinungsbild.</p>
+                  <h2 className={`text-lg font-semibold ${t.text}`}>Customize dashboard</h2>
+                  <p className={`mt-1 text-sm ${t.muted}`}>Give your dashboard a name and choose its appearance.</p>
                 </div>
-                <Input label="Dashboard-Name" value={dashboardName} onChange={setDashboardName}
-                  placeholder="Mein Dashboard" t={t} accent={accent} />
+                <Input label="Dashboard name" value={dashboardName} onChange={setDashboardName}
+                  placeholder="My Dashboard" t={t} accent={accent} />
                 <div className="space-y-1.5">
-                  <label className={`block text-sm font-medium ${t.muted}`}>Design</label>
+                  <label className={`block text-sm font-medium ${t.muted}`}>Theme</label>
                   <div className="grid grid-cols-3 gap-2">
                     {(['light', 'dark', 'ultra-dark'] as ThemeMode[]).map((m) => (
                       <button key={m} onClick={() => setTheme(m)}
@@ -1701,18 +1710,18 @@ function SetupWizard({ onDone, initStep, initEmail }: { onDone: () => void; init
                           theme === m ? '' : `${t.border} opacity-40 hover:opacity-70`
                         }`}
                         style={theme === m ? { borderColor: accent, color: accent } : {}}>
-                        {m === 'light' ? 'Hell' : m === 'dark' ? 'Dunkel' : 'Ultra-Dark'}
+                        {m === 'light' ? 'Light' : m === 'dark' ? 'Dark' : 'Ultra-Dark'}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className={`block text-sm font-medium ${t.muted}`}>Akzentfarbe</label>
+                  <label className={`block text-sm font-medium ${t.muted}`}>Accent color</label>
                   <ColorPicker value={accent} onChange={setAccent} t={t} />
                 </div>
                 <StatusMsg msg={status} t={t} />
                 <Btn accent={accent} className="w-full" onClick={finish} loading={loading}>
-                  Einrichtung abschließen
+                  Finish setup
                 </Btn>
               </div>
             ) : null}
@@ -1787,27 +1796,27 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
       const ch = await fetch('/api/auth/passkey/authentication-options', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
       });
-      if (!ch.ok) return setStatus(`✗ ${await readErr(ch, 'Anmeldung fehlgeschlagen')}`);
+      if (!ch.ok) return setStatus(`✗ ${await readErr(ch, 'Sign-in failed')}`);
       const assertion = await startAuthentication({ optionsJSON: await ch.json() });
       const verify = await fetch('/api/auth/passkey/verify-authentication', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify(assertion),
       });
-      if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Anmeldung fehlgeschlagen')}`);
+      if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Sign-in failed')}`);
       onLogin((await verify.json() as { user: SessionUser }).user);
     } catch (e: any) {
-      if (e?.name !== 'NotAllowedError') setStatus('✗ Anmeldung fehlgeschlagen oder abgebrochen.');
+      if (e?.name !== 'NotAllowedError') setStatus('✗ Sign-in failed or cancelled.');
     } finally { setLoading(false); }
   };
 
   return (
-    <AuthPage title={setup.dashboardName} sub="Melde dich mit deinem Passkey an" accent={accent} t={t}>
+    <AuthPage title={setup.dashboardName} sub="Sign in with your passkey" accent={accent} t={t}>
       <div className="space-y-3">
         <input
           type="email" value={email} autoFocus
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
-          placeholder="E-Mail Adresse"
+          placeholder="Email address"
           className="focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all text-white placeholder-white/30"
           style={{
             background: 'rgba(255,255,255,0.08)',
@@ -1827,12 +1836,12 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
           {loading ? <Spinner size={18} color="white" /> : (
             <>
               <FaceIDIcon size={20} />
-              Mit Passkey anmelden
+              Sign in with passkey
             </>
           )}
         </button>
         <p className="text-center text-[12px] pt-1 text-white/35">
-          Touch ID · Face ID · Sicherheitsschlüssel
+          Touch ID · Face ID · Security key
         </p>
       </div>
     </AuthPage>
@@ -1856,33 +1865,33 @@ function InvitePage({ setup, inviteToken, initEmail }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, inviteToken }),
       });
-      if (!opts.ok) return setStatus(`✗ ${await readErr(opts, 'Einladung ungültig oder abgelaufen')}`);
+      if (!opts.ok) return setStatus(`✗ ${await readErr(opts, 'Invitation invalid or expired')}`);
       const reg = await startRegistration({ optionsJSON: await opts.json() });
       const verify = await fetch('/api/auth/passkey/verify-registration', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, registrationResponse: reg, inviteToken }),
       });
-      if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Registrierung fehlgeschlagen')}`);
+      if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Registration failed')}`);
       window.history.replaceState({}, '', window.location.pathname);
       setDone(true);
     } catch (e: any) {
-      if (e?.name !== 'NotAllowedError') setStatus('✗ Passkey-Erstellung fehlgeschlagen.');
+      if (e?.name !== 'NotAllowedError') setStatus('✗ Passkey creation failed.');
     } finally { setLoading(false); }
   };
 
   return (
-    <AuthPage title="Einladung annehmen" sub="Erstelle deinen Passkey für das Dashboard" accent={accent} t={t}>
+    <AuthPage title="Accept invitation" sub="Create your passkey for the dashboard" accent={accent} t={t}>
       {done ? (
         <div className="flex flex-col items-center gap-4 py-2">
           <SuccessCheck color={accent} />
           <div className="text-center">
-            <p className={`font-semibold ${t.text}`}>Passkey erstellt</p>
-            <p className={`mt-1 text-[13px] ${t.muted}`}>Du kannst dich jetzt anmelden.</p>
+            <p className={`font-semibold ${t.text}`}>Passkey created</p>
+            <p className={`mt-1 text-[13px] ${t.muted}`}>You can sign in now.</p>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
-          <Input label="E-Mail" value={email} onChange={setEmail} t={t} accent={accent} />
+          <Input label="Email" value={email} onChange={setEmail} t={t} accent={accent} />
           <StatusMsg msg={status} t={t} />
           <button
             onClick={register}
@@ -1905,7 +1914,7 @@ const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
 
 const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] = [
   { key: 'home',      label: 'Home',      icon: <IcHome size={15} />,   color: '#007AFF' },
-  { key: 'devices',   label: 'Geräte',   icon: <IcGrid size={15} />,   color: '#5856D6' },
+  { key: 'devices',   label: 'Devices',  icon: <IcGrid size={15} />,   color: '#5856D6' },
   { key: 'discovery', label: 'Discovery', icon: <IcRadar size={15} />,  color: '#FF9500' },
   { key: 'admin',     label: 'Admin',     icon: <IcPerson size={15} />, color: '#30D158' },
 ];
@@ -1942,7 +1951,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
         const updated = (await r.json() as { device: Device }).device;
         setDevices(devices.map((d) => d.id === updated.id ? updated : d));
         setEditDevice(null);
-      } else { setDevStatus(`✗ ${await readErr(r, 'Fehler beim Speichern')}`); }
+      } else { setDevStatus(`✗ ${await readErr(r, 'Failed to save')}`); }
     } else {
       const r = await fetch('/api/devices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1952,7 +1961,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
         const { device } = await r.json() as { device: Device };
         setDevices([...devices, device]);
         setShowDeviceForm(false);
-      } else { setDevStatus(`✗ ${await readErr(r, 'Fehler beim Erstellen')}`); }
+      } else { setDevStatus(`✗ ${await readErr(r, 'Failed to create')}`); }
     }
   };
 
@@ -1967,12 +1976,12 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
     setDevStatus('');
     try {
       const start = await fetch('/api/pi-agent/discover', { method: 'POST', credentials: 'include' });
-      if (start.status === 400) { setDiscoverConfigured(false); setDevStatus('✗ Kein Pi Agent konfiguriert'); return; }
+      if (start.status === 400) { setDiscoverConfigured(false); setDevStatus('✗ No Pi Agent configured'); return; }
       // The scan runs in the background on the Pi — give it a few seconds, then pull results
       await new Promise((r) => setTimeout(r, 6000));
       await loadDiscovered();
     } catch {
-      setDevStatus('✗ Pi Agent nicht erreichbar');
+      setDevStatus('✗ Pi Agent unreachable');
     } finally {
       setDiscovering(false);
     }
@@ -2018,48 +2027,48 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className={`text-xl font-semibold ${t.text}`}>Einstellungen</h1>
+      <h1 className={`text-xl font-semibold ${t.text}`}>Settings</h1>
 
       {/* Appearance */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-5`} style={{ boxShadow: s.cardShadow }}>
-        <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Darstellung</h2>
+        <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Appearance</h2>
 
         <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Design</label>
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Theme</label>
           <Segmented accent={accent} s={s} value={theme} onChange={setTheme}
             options={[
-              { value: 'light', label: 'Hell' },
-              { value: 'dark', label: 'Dunkel' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
               { value: 'ultra-dark', label: 'Ultra' },
             ]} />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Akzentfarbe</label>
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Accent color</label>
           <ColorPicker value={accent} onChange={setAccent} t={t} />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Kartengröße</label>
+          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Card size</label>
           <Segmented accent={accent} s={s} value={cardSize} onChange={setCardSize}
             options={(Object.keys(CARD_SIZE_CONFIG) as CardSize[]).map((c) => ({ value: c, label: CARD_SIZE_CONFIG[c].label }))} />
-          <p className="text-[12px]" style={{ color: s.fgFaint }}>Bestimmt, wie groß die Gerätekacheln auf dem Geräte-Tab angezeigt werden.</p>
+          <p className="text-[12px]" style={{ color: s.fgFaint }}>Controls how large device cards appear on the Devices tab.</p>
         </div>
 
         <div className="flex items-center justify-between gap-4 pt-1">
           <div className="min-w-0">
-            <label className="block text-[14px] font-medium" style={{ color: s.fg }}>Kompakte Seitenleiste</label>
-            <p className="text-[12px]" style={{ color: s.fgMuted }}>Nur Symbole anzeigen, mehr Platz für Inhalte.</p>
+            <label className="block text-[14px] font-medium" style={{ color: s.fg }}>Compact sidebar</label>
+            <p className="text-[12px]" style={{ color: s.fgMuted }}>Show icons only, more room for content.</p>
           </div>
-          <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Kompakte Seitenleiste" />
+          <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Compact sidebar" />
         </div>
       </section>
 
       {/* Visibility */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
         <div>
-          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Sichtbarkeit</h2>
-          <p className="mt-0.5 text-[12px]" style={{ color: s.fgMuted }}>Wähle, welche Bereiche in der Seitenleiste erscheinen.</p>
+          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Visibility</h2>
+          <p className="mt-0.5 text-[12px]" style={{ color: s.fgMuted }}>Choose which sections appear in the sidebar.</p>
         </div>
         <div className="space-y-1">
           {NAV.filter((n) => n.key !== 'home' && (!ADMIN_ONLY_TABS.includes(n.key) || canAdmin)).map((n) => {
@@ -2097,7 +2106,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
         )}
 
         {widgets.length === 0 && !showWidgetForm && (
-          <p className={`text-sm ${t.muted}`}>Noch keine Widgets. Füge ein Widget hinzu, um es auf dem Home-Tab anzuzeigen.</p>
+          <p className={`text-sm ${t.muted}`}>No widgets yet. Add a widget to show it on the Home tab.</p>
         )}
         <div className="space-y-2">
           {widgets.map((w) => (
@@ -2114,7 +2123,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
                   <p className={`text-sm font-medium ${t.text}`}>
                     {WIDGET_TYPE_OPTIONS.find((o) => o.value === w.config.type)?.label.replace(/^\S+\s/, '') ?? w.config.type}
                   </p>
-                  <p className={`text-xs ${t.muted}`}>{w.layout.w}×{w.layout.h} Einheiten</p>
+                  <p className={`text-xs ${t.muted}`}>{w.layout.w}×{w.layout.h} units</p>
                 </div>
               </div>
               <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteWidget(w.id)}>×</Btn>
@@ -2127,13 +2136,13 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
       {canAdmin && (
         <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Geräte verwalten</h2>
+            <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Manage devices</h2>
             {!showDeviceForm && !editDevice && (
               <div className="flex gap-2">
                 <Btn accent={accent} variant="secondary" size="sm" onClick={runDiscovery} loading={discovering}>
-                  🔍 Geräte suchen
+                  🔍 Scan for devices
                 </Btn>
-                <Btn accent={accent} size="sm" onClick={() => { setPrefill(null); setShowDeviceForm(true); }}>+ Gerät</Btn>
+                <Btn accent={accent} size="sm" onClick={() => { setPrefill(null); setShowDeviceForm(true); }}>+ Device</Btn>
               </div>
             )}
           </div>
@@ -2143,7 +2152,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
           {/* Discovery results */}
           {discovered.length > 0 && !showDeviceForm && !editDevice && (
             <div className={`rounded-xl border p-3 space-y-2 ${t.border}`} style={{ borderColor: `${accent}25`, backgroundColor: `${accent}06` }}>
-              <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} Gerät(e) im Netzwerk gefunden</p>
+              <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} device(s) found on the network</p>
               {discovered.map((dd, i) => (
                 <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -2151,22 +2160,22 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
                     <div className="min-w-0">
                       <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
                       <p className={`text-xs ${t.muted}`}>
-                        {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unbekannt' : dd.type} · {dd.via}
+                        {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type} · {dd.via}
                       </p>
                     </div>
                   </div>
-                  <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Hinzufügen</Btn>
+                  <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
                 </div>
               ))}
             </div>
           )}
           {!discoverConfigured && (
-            <p className={`text-xs ${t.muted}`}>Geräte-Suche benötigt einen konfigurierten Pi Agent (PI_AGENT_URL).</p>
+            <p className={`text-xs ${t.muted}`}>Device search requires a configured Pi Agent (PI_AGENT_URL).</p>
           )}
 
           {(showDeviceForm || editDevice) && (
             <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
-              <p className={`mb-4 text-sm font-medium ${t.text}`}>{editDevice ? 'Gerät bearbeiten' : 'Neues Gerät'}</p>
+              <p className={`mb-4 text-sm font-medium ${t.text}`}>{editDevice ? 'Edit device' : 'New device'}</p>
               <DeviceForm
                 initial={editDevice ?? prefill ?? undefined}
                 onSave={async (data) => { await saveDevice(data); setPrefill(null); }}
@@ -2177,7 +2186,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
           )}
 
           {devices.length === 0 && !showDeviceForm && (
-            <p className={`text-sm ${t.muted}`}>Noch keine Geräte konfiguriert.</p>
+            <p className={`text-sm ${t.muted}`}>No devices configured yet.</p>
           )}
           <div className="space-y-2">
             {devices.map((d) => (
@@ -2230,7 +2239,7 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
         if (data.url) { window.open(data.url, '_blank'); }
         setActionStatus((prev) => ({ ...prev, [device.id]: data.ok ? '✓' : data.error ?? '?' }));
       } else {
-        const e = await readErr(r, 'Fehler');
+        const e = await readErr(r, 'Error');
         setActionStatus((prev) => ({ ...prev, [device.id]: `✗ ${e}` }));
       }
     } catch { setActionStatus((prev) => ({ ...prev, [device.id]: '✗ Netzwerkfehler' })); }
@@ -2240,16 +2249,16 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
   if (devices.length === 0) {
     return (
       <div className="animate-slide-right">
-        <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Geräte</h1>
-        <p className="mt-1 text-[14px]" style={{ color: s.fgMuted }}>Verbundene Geräte und Steuerung.</p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Devices</h1>
+        <p className="mt-1 text-[14px]" style={{ color: s.fgMuted }}>Connected devices and control.</p>
         <div className={`${s.glassSubtle} mt-6 rounded-[20px] p-16 text-center`}
           style={{ borderColor: `${accent}20` }}>
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px]"
             style={{ background: s.emptyBadge, color: s.fgFaint }}>
             <IcGrid size={24} />
           </div>
-          <p className="font-semibold" style={{ color: s.fg }}>Noch keine Geräte</p>
-          <p className="mt-1 text-[13px]" style={{ color: s.fgMuted }}>Geräte können in den Einstellungen hinzugefügt werden.</p>
+          <p className="font-semibold" style={{ color: s.fg }}>No devices yet</p>
+          <p className="mt-1 text-[13px]" style={{ color: s.fgMuted }}>Devices can be added in Settings.</p>
         </div>
       </div>
     );
@@ -2261,8 +2270,8 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
   return (
     <div className="animate-slide-right space-y-6">
       <div>
-        <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Geräte</h1>
-        <p className="text-[14px]" style={{ color: s.fgMuted }}>{shown.length} von {devices.length} Gerät{devices.length !== 1 ? 'en' : ''}{tagFilter ? ` · #${tagFilter}` : ''}</p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Devices</h1>
+        <p className="text-[14px]" style={{ color: s.fgMuted }}>{shown.length} of {devices.length} device{devices.length !== 1 ? 's' : ''}{tagFilter ? ` · #${tagFilter}` : ''}</p>
       </div>
 
       {allTags.length > 0 && (
@@ -2272,7 +2281,7 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
             style={tagFilter === null
               ? { background: accent, color: '#fff', boxShadow: `0 2px 8px ${accent}55` }
               : { background: s.emptyBadge, color: s.fgMuted }}>
-            Alle
+            All
           </button>
           {allTags.map((tag) => {
             const active = tagFilter === tag;
@@ -2353,38 +2362,38 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
                   <div className="flex flex-wrap gap-2">
                     {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
                       <>
-                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
                         <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
                       </>
                     )}
                     {device.type === 'wol' && (
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Aufwecken</Btn>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Wake</Btn>
                     )}
                     {device.type === 'proxmox' && (
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>VMs laden</Btn>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_vms')}>Load VMs</Btn>
                     )}
                     {(device.type === 'rdp' || device.type === 'ssh') && (
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Verbinden</Btn>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Connect</Btn>
                     )}
                     {device.type === 'http' && (
                       <>
-                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
                       </>
                     )}
                     {device.type === 'tasmota' && (
                       <>
-                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>Ein</Btn>
-                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Aus</Btn>
-                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energie</Btn>
+                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
+                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
+                        <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energy</Btn>
                       </>
                     )}
                     {device.type === 'docker' && (
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Container laden</Btn>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Load containers</Btn>
                     )}
                     {device.type === 'tailscale' && (
-                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Peers laden</Btn>
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Load peers</Btn>
                     )}
                   </div>
                 </div>
@@ -2448,8 +2457,8 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       credentials: 'include', body: JSON.stringify({ permissions: userPerms }),
     });
-    if (r.ok) setStatus('✓ Berechtigungen gespeichert');
-    else setStatus(`✗ ${await readErr(r, 'Fehler')}`);
+    if (r.ok) setStatus('✓ Permissions saved');
+    else setStatus(`✗ ${await readErr(r, 'Error')}`);
     setTimeout(() => setStatus(''), 2500);
   };
 
@@ -2474,29 +2483,29 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
       {/* Invite */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div>
-          <h2 className={`font-semibold ${t.text}`}>Nutzer einladen</h2>
-          <p className={`mt-0.5 text-sm ${t.muted}`}>Generiere einen Einladungslink.</p>
+          <h2 className={`font-semibold ${t.text}`}>Invite user</h2>
+          <p className={`mt-0.5 text-sm ${t.muted}`}>Generate an invitation link.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <Input value={inviteEmail} onChange={setInviteEmail}
-            placeholder="neu@beispiel.de" type="email" t={t} accent={accent} />
+            placeholder="new@example.com" type="email" t={t} accent={accent} />
           <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}
             className={`focus-accent rounded-xl px-3.5 py-2.5 text-sm outline-none transition-all
               ${t.inputBg} ${t.inputText} ${t.inputBorder}`}
             style={{ '--accent-ring': `${accent}55` } as React.CSSProperties}>
             <option value="admin">Admin</option>
             <option value="user">User</option>
-            <option value="readonly">Lesend</option>
+            <option value="readonly">Read-only</option>
           </select>
           <Btn accent={accent} onClick={createInvite} loading={inviteLoading}
             disabled={!inviteEmail.includes('@')}>
-            Einladung erstellen
+            Create invitation
           </Btn>
         </div>
         {status && <StatusMsg msg={status} t={t} />}
         {inviteUrl && (
           <div className={`rounded-xl border p-3 ${t.border}`} style={{ borderColor: `${accent}30`, backgroundColor: `${accent}08` }}>
-            <p className={`mb-1 text-xs font-medium ${t.muted}`}>Einladungslink</p>
+            <p className={`mb-1 text-xs font-medium ${t.muted}`}>Invitation link</p>
             <p className="break-all font-mono text-xs" style={{ color: accent }}>{inviteUrl}</p>
           </div>
         )}
@@ -2504,7 +2513,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
 
       {/* Users + Permissions */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
-        <h2 className={`font-semibold ${t.text}`}>Nutzer & Berechtigungen</h2>
+        <h2 className={`font-semibold ${t.text}`}>Users & permissions</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {/* User list */}
           <div className="space-y-2">
@@ -2530,7 +2539,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
           {/* Permission editor */}
           {selectedUser && (
             <div className={`rounded-xl border p-4 space-y-3 ${t.border}`} style={{ borderColor: `${accent}20` }}>
-              <p className={`text-sm font-medium ${t.text}`}>Berechtigungen für {selectedUser.email.split('@')[0]}</p>
+              <p className={`text-sm font-medium ${t.text}`}>Permissions for {selectedUser.email.split('@')[0]}</p>
               {permsLoading ? (
                 <Spinner size={20} color={accent} />
               ) : (
@@ -2547,7 +2556,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
                   ))}
                 </div>
               )}
-              <Btn accent={accent} size="sm" className="w-full" onClick={savePerms}>Speichern</Btn>
+              <Btn accent={accent} size="sm" className="w-full" onClick={savePerms}>Save</Btn>
               {status && <StatusMsg msg={status} t={t} />}
             </div>
           )}
@@ -2558,22 +2567,22 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className={`font-semibold ${t.text}`}>Aktivitätsprotokoll</h2>
-            <p className={`mt-0.5 text-sm ${t.muted}`}>Interne Vorgänge auf dem Pi Agent (Geräteaktionen, Konfig-Änderungen, Hosts).</p>
+            <h2 className={`font-semibold ${t.text}`}>Activity log</h2>
+            <p className={`mt-0.5 text-sm ${t.muted}`}>Internal events on the Pi Agent (device actions, config changes, hosts).</p>
           </div>
           <Btn accent={accent} variant="secondary" size="sm" onClick={loadAudit} loading={auditLoading}>↻ Aktualisieren</Btn>
         </div>
 
         {!auditConfigured ? (
-          <p className={`text-sm ${t.muted}`}>Kein Pi Agent konfiguriert — im lokalen Modus wird kein internes Protokoll geführt.</p>
+          <p className={`text-sm ${t.muted}`}>No Pi Agent configured — no internal log is kept in local mode.</p>
         ) : audit.length === 0 ? (
-          <p className={`text-sm ${t.muted}`}>Noch keine Einträge.</p>
+          <p className={`text-sm ${t.muted}`}>No entries yet.</p>
         ) : (
           <div className="space-y-1 max-h-96 overflow-y-auto">
             {audit.map((e, i) => (
               <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs ${t.navHover}`}>
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${e.ok ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString('de-DE')}</span>
+                <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString()}</span>
                 <span className="flex-shrink-0 rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${accent}15`, color: accent }}>{auditKindLabel(e.kind)}</span>
                 <span className={`min-w-0 flex-1 truncate ${t.text}`}>
                   {[e.action, e.deviceType, e.target].filter(Boolean).join(' · ')}
@@ -2591,12 +2600,12 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
 }
 
 const auditKindLabel = (k: AuditEntry['kind']): string => ({
-  action: 'Aktion',
-  config_create: 'Gerät +',
-  config_update: 'Gerät ✎',
-  config_delete: 'Gerät ×',
+  action: 'Action',
+  config_create: 'Device +',
+  config_update: 'Device ✎',
+  config_delete: 'Device ×',
   agent_register: 'Host',
-  agent_ip_change: 'IP-Wechsel',
+  agent_ip_change: 'IP change',
   discovery: 'Scan',
   auth_fail: 'Auth ✗',
 }[k] ?? k);
@@ -2614,6 +2623,7 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
 }) {
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [agents, setAgents] = useState<HostAgentInfo[]>([]);
+  const [pi, setPi] = useState<{ connected: boolean; version?: string; uptime?: number } | null>(null);
   const [configured, setConfigured] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2627,9 +2637,10 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     try {
       const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
       if (r.ok) {
-        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean };
+        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number } };
         setDiscovered(d.devices ?? []);
         setAgents(d.agents ?? []);
+        setPi(d.pi ?? null);
         setConfigured(d.configured);
       }
     } finally {
@@ -2646,7 +2657,7 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
       await load();
       setLastScan(Date.now());
     } catch {
-      setStatus('✗ Pi Agent nicht erreichbar');
+      setStatus('✗ Pi Agent unreachable');
     } finally {
       setScanning(false);
     }
@@ -2674,9 +2685,9 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     if (r.ok) {
       const { device } = await r.json() as { device: Device };
       setDevices([...devices, device]);
-      setStatus(`✓ ${device.name} hinzugefügt${(type === 'proxmox' || type === 'docker') ? ' — Zugangsdaten in Einstellungen ergänzen' : ''}`);
+      setStatus(`✓ ${device.name} added${(type === 'proxmox' || type === 'docker') ? ' — add credentials in Settings' : ''}`);
     } else {
-      setStatus(`✗ ${await readErr(r, 'Konnte Gerät nicht hinzufügen')}`);
+      setStatus(`✗ ${await readErr(r, 'Could not add device')}`);
     }
     setTimeout(() => setStatus(''), 4000);
   };
@@ -2686,9 +2697,9 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
       <div className="flex items-start justify-between">
         <div>
           <h1 className={`text-xl font-semibold ${t.text}`}>Discovery</h1>
-          <p className={`text-sm ${t.muted}`}>Im Heimnetz gefundene Geräte und registrierte Host-Agents.</p>
+          <p className={`text-sm ${t.muted}`}>Devices found on the local network and registered host agents.</p>
         </div>
-        <Btn accent={accent} onClick={scan} loading={scanning}>🔍 Netzwerk scannen</Btn>
+        <Btn accent={accent} onClick={scan} loading={scanning}>🔍 Scan network</Btn>
       </div>
 
       {status && <StatusMsg msg={status} t={t} />}
@@ -2696,23 +2707,52 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
       {!configured ? (
         <div className={`${s.glassSubtle} rounded-[22px] p-12 text-center`} style={{ boxShadow: s.cardShadow }}>
           <p className="text-4xl mb-3">◎</p>
-          <p className={`font-medium ${t.text}`}>Kein Pi Agent konfiguriert</p>
-          <p className={`mt-1 text-sm ${t.muted}`}>Setze <code>PI_AGENT_URL</code> in der Dashboard-Konfiguration, um Discovery zu nutzen.</p>
+          <p className={`font-medium ${t.text}`}>No Pi Agent configured</p>
+          <p className={`mt-1 text-sm ${t.muted}`}>Set <code>PI_AGENT_URL</code> in the dashboard config to use discovery.</p>
         </div>
       ) : (
         <>
+          {/* Pi Agent status */}
+          <section className={`${s.glassSubtle} rounded-[22px] p-5`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] text-[20px]"
+                  style={{ background: `${accent}1A` }}>🛡️</div>
+                <div>
+                  <p className={`text-sm font-semibold ${t.text}`}>Pi Agent</p>
+                  <p className={`text-xs ${t.muted}`}>
+                    {pi?.connected
+                      ? `v${pi.version ?? '?'} · up ${formatUptime(pi.uptime)} · ${agents.length} host agent${agents.length !== 1 ? 's' : ''}`
+                      : 'Configured, but currently unreachable'}
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  color: pi?.connected ? '#30D158' : '#FF453A',
+                  background: pi?.connected ? 'rgba(48,209,88,0.13)' : 'rgba(255,69,58,0.13)',
+                  border: `1px solid ${pi?.connected ? 'rgba(48,209,88,0.22)' : 'rgba(255,69,58,0.22)'}`,
+                }}>
+                <span className="h-[6px] w-[6px] rounded-full"
+                  style={{ backgroundColor: pi?.connected ? '#30D158' : '#FF453A',
+                    animation: pi?.connected ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
+                {pi?.connected ? 'Connected' : 'Offline'}
+              </span>
+            </div>
+          </section>
+
           {/* Discovered devices */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <div className="flex items-center justify-between">
-              <h2 className={`font-semibold ${t.text}`}>Gefundene Geräte</h2>
+              <h2 className={`font-semibold ${t.text}`}>Discovered devices</h2>
               <span className={`text-xs ${t.muted}`}>
-                {lastScan ? `Zuletzt gescannt: ${new Date(lastScan).toLocaleTimeString('de-DE')}` : `${discovered.length} bekannt`}
+                {lastScan ? `Last scan: ${new Date(lastScan).toLocaleTimeString()}` : `${discovered.length} known`}
               </span>
             </div>
             {loading ? (
               <Spinner size={20} color={accent} />
             ) : discovered.length === 0 ? (
-              <p className={`text-sm ${t.muted}`}>Noch nichts gefunden. Starte einen Scan — der Pi durchsucht ARP-Tabelle und mDNS.</p>
+              <p className={`text-sm ${t.muted}`}>Nothing found yet. Start a scan — the Pi searches the ARP table and mDNS.</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {discovered.map((dd, i) => {
@@ -2725,14 +2765,14 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                         <div className="min-w-0">
                           <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
                           <p className={`text-xs ${t.muted}`}>
-                            {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unbekannt' : dd.type}
+                            {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type}
                             <span className="ml-1 opacity-60">({dd.via})</span>
                           </p>
                         </div>
                       </div>
                       {known
-                        ? <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500`}>konfiguriert</span>
-                        : <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Hinzufügen</Btn>}
+                        ? <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500`}>configured</span>
+                        : <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>}
                     </div>
                   );
                 })}
@@ -2742,10 +2782,10 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
 
           {/* Host agents */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
-            <h2 className={`font-semibold ${t.text}`}>Host-Agents</h2>
-            <p className={`text-sm ${t.muted}`}>Server, die sich selbst beim Pi Agent melden (z. B. Proxmox, Docker-Hosts).</p>
+            <h2 className={`font-semibold ${t.text}`}>Host agents</h2>
+            <p className={`text-sm ${t.muted}`}>Servers that report themselves to the Pi Agent (e.g. Proxmox, Docker hosts).</p>
             {agents.length === 0 ? (
-              <p className={`text-sm ${t.muted}`}>Keine Host-Agents registriert.</p>
+              <p className={`text-sm ${t.muted}`}>No host agents registered.</p>
             ) : (
               <div className="space-y-2">
                 {agents.map((a) => (
@@ -2761,7 +2801,7 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                       </div>
                     </div>
                     <span className={`text-xs ${t.muted}`}>
-                      {a.online ? 'online' : `zuletzt ${new Date(a.lastSeen).toLocaleTimeString('de-DE')}`}
+                      {a.online ? 'online' : `last seen ${new Date(a.lastSeen).toLocaleTimeString()}`}
                     </span>
                   </div>
                 ))}
@@ -2893,7 +2933,7 @@ function Dashboard({ user, setup, onSignOut }: {
 
   const ALL_NAV = [
     ...visibleNav,
-    { key: 'settings' as Tab, label: 'Einstellungen', icon: <IcGear size={15} />, color: '#8E8E93' },
+    { key: 'settings' as Tab, label: 'Settings',     icon: <IcGear size={15} />, color: '#8E8E93' },
   ];
 
   const sidebarW = sidebarCompact ? 'w-[74px]' : 'w-[232px]';
@@ -3003,7 +3043,7 @@ function Dashboard({ user, setup, onSignOut }: {
                     <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25z" clipRule="evenodd"/>
                     <path fillRule="evenodd" d="M6 10a.75.75 0 0 1 .75-.75h9.546l-1.048-1.16a.75.75 0 1 1 1.104-1.02l2.5 2.75a.75.75 0 0 1 0 1.02l-2.5 2.75a.75.75 0 1 1-1.104-1.02l1.048-1.16H6.75A.75.75 0 0 1 6 10z" clipRule="evenodd"/>
                   </svg>
-                  Abmelden
+                  Sign out
                 </button>
               </div>
             )}
@@ -3027,9 +3067,9 @@ function Dashboard({ user, setup, onSignOut }: {
               onClickCapture={onDashboardClickCapture}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Übersicht</h1>
+                  <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Overview</h1>
                   <p className="text-[14px]" style={{ color: s.fgMuted }}>
-                    {editMode ? 'Dashboard bearbeiten' : `Guten Tag, ${user.email.split('@')[0]}`}
+                    {editMode ? 'Edit dashboard' : `Hello, ${user.email.split('@')[0]}`}
                   </p>
                 </div>
                 {editMode && (
@@ -3041,7 +3081,7 @@ function Dashboard({ user, setup, onSignOut }: {
                     </button>
                     {/* Hackerl — confirm / leave edit mode */}
                     <button onClick={() => { setEditMode(false); setShowAddWidget(false); }}
-                      aria-label="Fertig" title="Fertig"
+                      aria-label="Done" title="Done"
                       className="flex h-9 w-9 items-center justify-center rounded-full transition-all active:scale-90 hover:scale-105"
                       style={{ background: accent, color: '#fff', boxShadow: `0 3px 12px ${accent}66, inset 0 1px 0 rgba(255,255,255,0.3)` }}>
                       <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
@@ -3055,14 +3095,14 @@ function Dashboard({ user, setup, onSignOut }: {
               {editMode && (
                 <div className="flex items-center gap-2 rounded-[14px] px-4 py-2.5 text-[12.5px] animate-slide-up"
                   style={{ background: `${accent}12`, color: s.fgMuted, border: `1px solid ${accent}22` }}>
-                  <span>Bearbeitungsmodus — Kacheln per +/− vergrößern oder mit × entfernen. Zum Beenden oben auf das Hackerl ✓ tippen.</span>
+                  <span>Edit mode — resize tiles with +/−, remove with ×. Tap the checkmark ✓ above when done.</span>
                 </div>
               )}
 
               {showAddWidget && (
                 <div className={`${s.glassSubtle} rounded-[20px] p-5`}
                   style={{ borderColor: `${accent}20` }}>
-                  <p className="mb-4 font-semibold" style={{ color: s.fg }}>Widget hinzufügen</p>
+                  <p className="mb-4 font-semibold" style={{ color: s.fg }}>Add widget</p>
                   <WidgetForm onSave={addWidget} onCancel={() => setShowAddWidget(false)} devices={devices} t={t} accent={accent} />
                 </div>
               )}
@@ -3073,9 +3113,9 @@ function Dashboard({ user, setup, onSignOut }: {
                     style={{ background: `${accent}15`, color: s.fgFaint }}>
                     <IcGrid size={24} />
                   </div>
-                  <p className="font-semibold" style={{ color: s.fg }}>Keine Widgets</p>
+                  <p className="font-semibold" style={{ color: s.fg }}>No widgets</p>
                   <p className="mt-1 text-[13px]" style={{ color: s.fgMuted }}>
-                    {editMode ? 'Klicke auf „+ Widget", um dein Dashboard anzupassen.' : 'Halte das Dashboard gedrückt, um es zu bearbeiten.'}
+                    {editMode ? 'Tap “+ Widget” to customize your dashboard.' : 'Press and hold the dashboard to edit it.'}
                   </p>
                 </div>
               )}
@@ -3100,12 +3140,12 @@ function Dashboard({ user, setup, onSignOut }: {
                               boxShadow: '0 8px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',
                               border: `1px solid ${s.hairline}`,
                             }}>
-                            <EditStepper label="Breite verkleinern" sym="−" onClick={() => resizeWidget(widget.id, -1, 0)} accent={accent} />
+                            <EditStepper label="Decrease width" sym="−" onClick={() => resizeWidget(widget.id, -1, 0)} accent={accent} />
                             <span className="min-w-[26px] text-center text-[11px] font-semibold tabular-nums" style={{ color: s.fg }}>{widget.layout.w}×{widget.layout.h}</span>
-                            <EditStepper label="Breite vergrößern" sym="+" onClick={() => resizeWidget(widget.id, 1, 0)} accent={accent} />
+                            <EditStepper label="Increase width" sym="+" onClick={() => resizeWidget(widget.id, 1, 0)} accent={accent} />
                             <span className="mx-0.5 h-[18px] w-px self-center" style={{ background: s.hairline }} />
-                            <EditStepper label="Höhe verkleinern" sym="▾" onClick={() => resizeWidget(widget.id, 0, -1)} accent={accent} />
-                            <EditStepper label="Höhe vergrößern" sym="▴" onClick={() => resizeWidget(widget.id, 0, 1)} accent={accent} />
+                            <EditStepper label="Decrease height" sym="▾" onClick={() => resizeWidget(widget.id, 0, -1)} accent={accent} />
+                            <EditStepper label="Increase height" sym="▴" onClick={() => resizeWidget(widget.id, 0, 1)} accent={accent} />
                           </div>
                         )}
                       </div>

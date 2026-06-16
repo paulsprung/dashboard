@@ -1096,19 +1096,26 @@ app.get('/api/pi-agent/discovered', async (req, res) => {
     return res.json({ devices: [], agents: [], configured: false });
   }
   try {
-    const [devR, agR] = await Promise.all([
+    const [devR, agR, healthR] = await Promise.all([
       fetch(`${process.env.PI_AGENT_URL}/discover/results`, {
         headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
       }),
       fetch(`${process.env.PI_AGENT_URL}/agents`, {
         headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
       }),
+      fetch(`${process.env.PI_AGENT_URL}/health`, {
+        headers: { Authorization: `Bearer ${process.env.PI_AGENT_SECRET}` },
+      }).catch(() => null),
     ]);
     const devices = devR.ok ? await devR.json() : [];
     const agents = agR.ok ? await agR.json() : [];
-    return res.json({ devices, agents, configured: true });
+    const health = healthR && healthR.ok ? await healthR.json() : null;
+    const pi = health
+      ? { connected: true, version: health.version as string, uptime: health.uptime as number }
+      : { connected: false };
+    return res.json({ devices, agents, configured: true, pi });
   } catch {
-    return res.status(502).json({ error: 'Pi Agent unreachable' });
+    return res.json({ devices: [], agents: [], configured: true, pi: { connected: false } });
   }
 });
 
