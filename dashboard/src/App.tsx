@@ -2221,11 +2221,51 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
 
 // ── Devices tab ───────────────────────────────────────────────────────────────
 
-function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus>; s: ShellTokens; cardSize: CardSize }) {
+type AccessGrant = { id: string; deviceId: string; label: string; ip: string; port: number; expiresAt: number; url: string };
+
+// Device types that expose a single reachable endpoint worth a "Connect" button.
+const ACCESSIBLE_TYPES = new Set(['proxmox', 'http', 'docker', 'rdp', 'ssh', 'shelly_plug', 'shelly_light', 'tasmota']);
+
+function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus>; s: ShellTokens; cardSize: CardSize; user: SessionUser }) {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const cs = CARD_SIZE_CONFIG[cardSize];
   const allTags = [...new Set(devices.flatMap((d) => d.tags ?? []))].sort();
+
+  // ── Just-in-Time remote access (admin only) ──
+  const canAccess = user.role === 'root' || user.role === 'admin';
+  const [accessEnabled, setAccessEnabled] = useState(false);
+  const [grants, setGrants] = useState<AccessGrant[]>([]);
+  const [accessBusy, setAccessBusy] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const loadAccess = async () => {
+    const r = await fetch('/api/access', { credentials: 'include' });
+    if (r.ok) { const d = await r.json() as { enabled: boolean; grants: AccessGrant[] }; setAccessEnabled(d.enabled); setGrants(d.grants ?? []); }
+  };
+  useEffect(() => { if (canAccess) void loadAccess(); }, [canAccess]);
+  useEffect(() => { if (!grants.length) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, [grants.length]);
+
+  const requestAccess = async (device: Device) => {
+    setAccessBusy(device.id);
+    try {
+      const r = await fetch('/api/access/grant', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ deviceId: device.id }),
+      });
+      const d = await r.json() as { ok?: boolean; grant?: AccessGrant; error?: string };
+      if (r.ok && d.grant) { await loadAccess(); window.open(d.grant.url, '_blank', 'noopener'); }
+      else setActionStatus((p) => ({ ...p, [device.id]: `✗ ${d.error ?? 'Access failed'}` }));
+    } catch { setActionStatus((p) => ({ ...p, [device.id]: '✗ Network error' })); }
+    setAccessBusy(null);
+    setTimeout(() => setActionStatus((p) => { const n = { ...p }; delete n[device.id]; return n; }), 4000);
+  };
+  const revokeAccess = async (id: string) => {
+    await fetch('/api/access/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ id }) });
+    await loadAccess();
+  };
+  const grantFor = (deviceId: string) => grants.find((g) => g.deviceId === deviceId && g.expiresAt > now);
+  const mmss = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
   const doAction = async (device: Device, action: string) => {
     setActionStatus((prev) => ({ ...prev, [device.id]: '…' }));
@@ -2395,6 +2435,25 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize }: { devices: De
                     {device.type === 'tailscale' && (
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_devices')}>Load peers</Btn>
                     )}
+
+                    {/* Just-in-Time remote access */}
+                    {canAccess && accessEnabled && ACCESSIBLE_TYPES.has(device.type) && (() => {
+                      const g = grantFor(device.id);
+                      return g ? (
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => window.open(g.url, '_blank', 'noopener')}
+                            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white"
+                            style={{ background: '#30C759', boxShadow: '0 2px 8px rgba(48,199,89,0.4)' }}>
+                            🔓 Open · {mmss(g.expiresAt - now)}
+                          </button>
+                          <button onClick={() => void revokeAccess(g.id)} title="Revoke access"
+                            className={`rounded-lg px-2 py-1.5 text-xs ${t.inputBg} ${t.muted} hover:opacity-100 opacity-70`}>✕</button>
+                        </div>
+                      ) : (
+                        <Btn accent={accent} variant="secondary" size="sm" loading={accessBusy === device.id}
+                          onClick={() => void requestAccess(device)}>🔐 Connect</Btn>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -3195,7 +3254,7 @@ function Dashboard({ user, setup, onSignOut }: {
           )}
 
           {tab === 'devices' && (
-            <DevicesTab devices={devices} t={t} accent={accent} statuses={monitorStatuses} s={s} cardSize={cardSize} />
+            <DevicesTab devices={devices} t={t} accent={accent} statuses={monitorStatuses} s={s} cardSize={cardSize} user={user} />
           )}
 
           {tab === 'settings' && (

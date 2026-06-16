@@ -1135,6 +1135,50 @@ app.post('/api/pi-agent/discover', async (req, res) => {
   }
 });
 
+// ── Just-in-Time remote access (forwarded to the Pi Agent) ────────────────────
+// Admin-only. The powerful Tailscale ACL key lives on the Pi, never here.
+
+app.get('/api/access', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.json({ enabled: false, grants: [] });
+  try {
+    const r = await piAgentFetch('/access');
+    return res.status(r.status).json(await r.json());
+  } catch { return res.json({ enabled: false, grants: [] }); }
+});
+
+app.post('/api/access/grant', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user || !isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.status(400).json({ error: 'Pi Agent not configured' });
+  const { deviceId, ttl } = req.body as { deviceId?: string; ttl?: number };
+  if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+  const device = devices.get(deviceId);
+  try {
+    const r = await piAgentFetch('/access/grant', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId, label: device?.name ?? deviceId, ttl, actor: user.email }),
+    });
+    return res.status(r.status).json(await r.json());
+  } catch (err) {
+    return res.status(502).json({ error: `Pi Agent error: ${(err as Error).message}` });
+  }
+});
+
+app.post('/api/access/revoke', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user || !isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.status(400).json({ error: 'Pi Agent not configured' });
+  const { id } = req.body as { id?: string };
+  if (!id) return res.status(400).json({ error: 'id required' });
+  try {
+    const r = await piAgentFetch('/access/revoke', { method: 'POST', body: JSON.stringify({ id, actor: user.email }) });
+    return res.status(r.status).json(await r.json());
+  } catch (err) {
+    return res.status(502).json({ error: `Pi Agent error: ${(err as Error).message}` });
+  }
+});
+
 // ── Monitor route ────────────────────────────────────────────────────────────
 
 app.get('/api/monitor/status', (req, res) => {

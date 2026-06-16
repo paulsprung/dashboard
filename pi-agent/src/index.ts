@@ -8,6 +8,7 @@ import { startMdnsListener, runDiscovery, getLastResults } from './discovery.js'
 import { executeDeviceAction } from './proxy.js';
 import type { DeviceConfig } from './proxy.js';
 import { logEvent, getRecent, type AuditKind } from './audit.js';
+import { accessEnabled, grantAccess, revokeAccess, listGrants, startAccessSweeper } from './access.js';
 
 // Best-effort human-readable target for the audit log (what the Pi will contact)
 const describeTarget = (cfg: DeviceConfig): string => {
@@ -322,10 +323,37 @@ app.get('/agents', (_req, res) => {
   res.json(list);
 });
 
+// ── Just-in-Time remote access (Tailscale ACL grants) ─────────────────────────
+
+app.get('/access', (_req, res) => {
+  res.json({ enabled: accessEnabled(), grants: listGrants() });
+});
+
+app.post('/access/grant', async (req, res) => {
+  const { deviceId, label, ttl, actor } = req.body as { deviceId?: string; label?: string; ttl?: number; actor?: string };
+  if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+  const cfg = deviceConfigs.get(deviceId);
+  if (!cfg) return res.status(404).json({ error: 'Device config not found on Pi' });
+  try {
+    const grant = await grantAccess({ deviceId, label: label ?? deviceId, cfg, ttlSec: ttl, actor });
+    return res.json({ ok: true, grant });
+  } catch (e) {
+    return res.status(accessEnabled() ? 502 : 400).json({ error: (e as Error).message });
+  }
+});
+
+app.post('/access/revoke', async (req, res) => {
+  const { id, actor } = req.body as { id?: string; actor?: string };
+  if (!id) return res.status(400).json({ error: 'id required' });
+  try { await revokeAccess(id, actor); return res.json({ ok: true }); }
+  catch (e) { return res.status(502).json({ error: (e as Error).message }); }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(port, bindHost, () => {
   console.log(`SM Pi Agent listening on ${bindHost}:${port}`);
+  startAccessSweeper();
   startMdnsListener();
   setTimeout(() => {
     void runDiscovery(process.env.LOCAL_SUBNET).then((r) =>
