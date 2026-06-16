@@ -77,10 +77,32 @@ const urlFor = (ip: string, port: number): string => {
   return `${https ? 'https' : 'http'}://${ip}:${port}`;
 };
 
+// Parse HuJSON (the format Tailscale uses): standard JSON plus `//` and `/* */`
+// comments and trailing commas. We strip those (string-aware) then JSON.parse.
+const parseHuJSON = (text: string): Record<string, unknown> => {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], c2 = text[i + 1];
+    if (inStr) {
+      out += c;
+      if (c === '\\') { out += text[++i] ?? ''; continue; }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === '/' && c2 === '/') { while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (c === '/' && c2 === '*') { i += 2; while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++; i++; continue; }
+    out += c;
+  }
+  out = out.replace(/,(\s*[}\]])/g, '$1'); // drop trailing commas
+  return JSON.parse(out) as Record<string, unknown>;
+};
+
 // Full policy = your baseline + one accept rule per active grant.
 const buildPolicy = (): Record<string, unknown> => {
-  const baseline = JSON.parse(readFileSync(baselineFile, 'utf8')) as { acls?: unknown[] };
-  const acls = Array.isArray(baseline.acls) ? [...baseline.acls] : [];
+  const baseline = parseHuJSON(readFileSync(baselineFile, 'utf8'));
+  const acls = Array.isArray(baseline.acls) ? [...(baseline.acls as unknown[])] : [];
   for (const g of activeGrants()) {
     acls.push({ action: 'accept', src: [g.identity], dst: [`${g.ip}:${g.port}`] });
   }
