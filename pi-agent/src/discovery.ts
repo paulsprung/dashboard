@@ -43,6 +43,29 @@ const tcpProbe = (host: string, port: number, timeoutMs = 1500): Promise<boolean
     s.once('timeout', () => { s.destroy(); resolve(false); });
   });
 
+// ── Active subnet sweep ────────────────────────────────────────────────────────
+// Touching every host (a TCP SYN forces ARP resolution) populates /proc/net/arp
+// for all reachable hosts — turning the passive ARP read into an active scan.
+
+function hostsInSubnet(subnet?: string): string[] {
+  if (!subnet) return [];
+  const [base, bitsStr] = subnet.split('/');
+  const bits = Number(bitsStr ?? '24');
+  const octets = base.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((n) => Number.isNaN(n)) || bits < 24) return []; // only sweep /24 (or smaller)
+  return Array.from({ length: 254 }, (_, i) => `${octets[0]}.${octets[1]}.${octets[2]}.${i + 1}`);
+}
+
+async function sweepSubnet(subnet?: string): Promise<void> {
+  const hosts = hostsInSubnet(subnet);
+  const batchSize = 64;
+  for (let i = 0; i < hosts.length; i += batchSize) {
+    // A reachable host answers the ARP request even if the TCP port is closed/firewalled,
+    // so a short-timeout connect attempt is enough to put it in the ARP cache.
+    await Promise.allSettled(hosts.slice(i, i + batchSize).map((ip) => tcpProbe(ip, 80, 500)));
+  }
+}
+
 // ── Device fingerprinting ─────────────────────────────────────────────────────
 
 async function fingerprintIp(ip: string): Promise<Omit<DiscoveredDevice, 'ip' | 'mac' | 'discoveredAt' | 'via'>> {
@@ -132,17 +155,21 @@ export function startMdnsListener() {
 // ── Full discovery run ────────────────────────────────────────────────────────
 
 export async function runDiscovery(subnet?: string): Promise<DiscoveredDevice[]> {
+  // Active sweep first so the ARP table reflects every reachable host, not just
+  // the ones the Pi happened to talk to recently.
+  await sweepSubnet(subnet);
+
   const arpEntries = await readArpTable();
   const results: DiscoveredDevice[] = [];
 
-  // Fingerprint all ARP-known hosts in parallel (max 20 concurrent)
+  // Fingerprint all ARP-known hosts in parallel (max 20 concurrent). Hosts we
+  // can't classify are still returned as 'unknown' so you can add them manually.
   const batchSize = 20;
   for (let i = 0; i < arpEntries.length; i += batchSize) {
     const batch = arpEntries.slice(i, i + batchSize);
     const probes = await Promise.allSettled(
       batch.map(async ({ ip, mac }) => {
         const fingerprint = await fingerprintIp(ip);
-        if (fingerprint.type === 'unknown') return null;
         const mdnsHint = mdnsCache.get(ip);
         return {
           ip, mac,
