@@ -18,7 +18,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    network_mode: host        # needs host network for ARP table access + mDNS
+    network_mode: host        # host network = the real ARP table + mDNS are visible inside
+                              # the container at /proc/net/arp (no bind mount needed — newer
+                              # runc rejects mounting files from /proc anyway)
     volumes:
-      - /proc/net/arp:/proc/net/arp:ro   # read-only ARP table access
-      - ./data:/app/data                  # device configs (secrets) + audit log — persisted, BACK THIS UP
+      - ./data:/app/data       # device configs (secrets) + audit log — persisted, BACK THIS UP
