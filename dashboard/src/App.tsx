@@ -2617,13 +2617,23 @@ type HostAgentInfo = {
   services: string[]; registeredAt: number; lastSeen: number; online: boolean;
 };
 
+type PiMetrics = {
+  cpus: number; cpuPct: number; load1: number;
+  memTotal: number; memUsed: number; memPct: number;
+  tempC: number | null;
+  diskTotal: number | null; diskUsed: number | null; diskPct: number | null;
+  osUptime: number;
+};
+
+const fmtGB = (b?: number | null) => b != null ? `${(b / 1e9).toFixed(b < 1e10 ? 1 : 0)} GB` : '–';
+
 function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   devices: Device[]; setDevices: (d: Device[]) => void;
   t: ReturnType<typeof tok>; accent: string; s: ShellTokens;
 }) {
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [agents, setAgents] = useState<HostAgentInfo[]>([]);
-  const [pi, setPi] = useState<{ connected: boolean; version?: string; uptime?: number } | null>(null);
+  const [pi, setPi] = useState<{ connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } | null>(null);
   const [configured, setConfigured] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2637,7 +2647,7 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     try {
       const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
       if (r.ok) {
-        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number } };
+        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } };
         setDiscovered(d.devices ?? []);
         setAgents(d.agents ?? []);
         setPi(d.pi ?? null);
@@ -2739,6 +2749,34 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                 {pi?.connected ? 'Connected' : 'Offline'}
               </span>
             </div>
+
+            {pi?.connected && pi.metrics && (
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { label: 'CPU',  value: `${pi.metrics.cpuPct}%`,  sub: `load ${pi.metrics.load1}`, pct: pi.metrics.cpuPct },
+                  { label: 'RAM',  value: `${pi.metrics.memPct}%`,  sub: `${fmtGB(pi.metrics.memUsed)} / ${fmtGB(pi.metrics.memTotal)}`, pct: pi.metrics.memPct },
+                  { label: 'Temp', value: pi.metrics.tempC != null ? `${pi.metrics.tempC}°C` : '–', sub: 'CPU', pct: pi.metrics.tempC != null ? Math.min(100, Math.round((pi.metrics.tempC / 85) * 100)) : null },
+                  { label: 'Disk', value: pi.metrics.diskPct != null ? `${pi.metrics.diskPct}%` : '–', sub: `${fmtGB(pi.metrics.diskUsed)} / ${fmtGB(pi.metrics.diskTotal)}`, pct: pi.metrics.diskPct },
+                ].map((m) => {
+                  const warn = m.pct != null && m.pct >= 85;
+                  const col = warn ? '#FF453A' : accent;
+                  return (
+                    <div key={m.label} className={`rounded-[14px] p-3 ${t.inputBg}`}>
+                      <div className="flex items-baseline justify-between">
+                        <span className={`text-[11px] font-medium uppercase tracking-wide ${t.muted}`}>{m.label}</span>
+                        <span className="text-[15px] font-semibold tabular-nums" style={{ color: col }}>{m.value}</span>
+                      </div>
+                      {m.pct != null && (
+                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full" style={{ background: `${col}22` }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${m.pct}%`, background: col }} />
+                        </div>
+                      )}
+                      <p className={`mt-1.5 text-[10px] ${t.muted} truncate`}>{m.sub}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           {/* Discovered devices */}

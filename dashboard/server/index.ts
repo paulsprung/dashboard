@@ -1111,7 +1111,7 @@ app.get('/api/pi-agent/discovered', async (req, res) => {
     const agents = agR.ok ? await agR.json() : [];
     const health = healthR && healthR.ok ? await healthR.json() : null;
     const pi = health
-      ? { connected: true, version: health.version as string, uptime: health.uptime as number }
+      ? { connected: true, version: health.version as string, uptime: health.uptime as number, metrics: health.metrics ?? null }
       : { connected: false };
     return res.json({ devices, agents, configured: true, pi });
   } catch {

@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, statfsSync } from 'node:fs';
+import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import express from 'express';
@@ -82,8 +83,43 @@ const hostAgents = new Map<string, HostAgent>();
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
+// Host (Raspberry Pi) system metrics — best-effort, degrades gracefully on
+// hosts without a thermal sensor or where statfs is unavailable.
+function getMetrics() {
+  const load = os.loadavg();
+  const cpus = os.cpus().length || 1;
+  const totalmem = os.totalmem();
+  const freemem = os.freemem();
+  let tempC: number | null = null;
+  try {
+    const raw = readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8');
+    tempC = Math.round(parseInt(raw.trim(), 10) / 100) / 10; // millidegrees → °C (1 decimal)
+  } catch { /* no thermal sensor (e.g. not a Pi) */ }
+  let disk: { total: number; free: number } | null = null;
+  for (const p of ['/app/data', '/']) {
+    try {
+      const st = statfsSync(p);
+      disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize };
+      break;
+    } catch { /* try next path */ }
+  }
+  return {
+    cpus,
+    cpuPct: Math.min(100, Math.round((load[0] / cpus) * 100)),
+    load1: Math.round(load[0] * 100) / 100,
+    memTotal: totalmem,
+    memUsed: totalmem - freemem,
+    memPct: Math.round(((totalmem - freemem) / totalmem) * 100),
+    tempC,
+    diskTotal: disk ? disk.total : null,
+    diskUsed: disk ? disk.total - disk.free : null,
+    diskPct: disk ? Math.round(((disk.total - disk.free) / disk.total) * 100) : null,
+    osUptime: Math.round(os.uptime()),
+  };
+}
+
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: '0.1.0', uptime: process.uptime() });
+  res.json({ ok: true, version: '0.1.0', uptime: process.uptime(), metrics: getMetrics() });
 });
 
 // ── Device config CRUD ────────────────────────────────────────────────────────
