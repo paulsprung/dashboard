@@ -629,9 +629,35 @@ app.post('/api/auth/passkey/verify-registration', async (req, res) => {
   return res.json({ verified: true });
 });
 
+// Challenges for usernameless (discoverable passkey) logins. These aren't tied
+// to a user yet — the user is identified from the returned credential at verify.
+const discoverableChallenges = new Map<string, number>(); // challenge -> expiry (ms)
+const DISCOVERABLE_TTL_MS = 5 * 60 * 1000;
+const consumeDiscoverableChallenge = (challenge: string): boolean => {
+  const exp = discoverableChallenges.get(challenge);
+  if (exp === undefined) return false;
+  discoverableChallenges.delete(challenge);
+  return exp > Date.now();
+};
+
 app.post('/api/auth/passkey/authentication-options', async (req, res) => {
   const { email } = req.body as { email?: string };
-  if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Sign-in failed. Check your email and try again.' });
+
+  // Usernameless flow: no email → offer every discoverable passkey (Apple-style
+  // "just tap" sign-in). The user is resolved from the credential at verify time.
+  if (!email) {
+    const options = await generateAuthenticationOptions({
+      rpID: getEffectiveRPID(),
+      allowCredentials: [],
+      userVerification: requireUserVerification ? 'required' : 'preferred',
+    });
+    const now = Date.now();
+    for (const [c, e] of discoverableChallenges) if (e < now) discoverableChallenges.delete(c);
+    discoverableChallenges.set(options.challenge, now + DISCOVERABLE_TTL_MS);
+    return res.json(options);
+  }
+
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Sign-in failed. Check your email and try again.' });
 
   const user = usersByEmail.get(email.trim().toLowerCase());
   // Generic error to avoid user enumeration
@@ -655,7 +681,9 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   const user = [...usersByEmail.values()].find((candidate) =>
     candidate.authenticators.some((a) => a.credentialID === body.id),
   );
-  if (!user || !user.currentChallenge) {
+  // The challenge may live on the user (email flow) or in the discoverable store
+  // (usernameless flow) — validated below via the expectedChallenge function.
+  if (!user) {
     return res.status(400).json({ error: 'Could not validate this login request' });
   }
 
@@ -672,7 +700,10 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   try {
     verification = await verifyAuthenticationResponse({
       response: body as any,
-      expectedChallenge: user.currentChallenge,
+      // Accept either the user-bound challenge (email flow) or a valid
+      // discoverable challenge (usernameless flow). Consuming prevents replay.
+      expectedChallenge: (challenge: string) =>
+        (!!user.currentChallenge && challenge === user.currentChallenge) || consumeDiscoverableChallenge(challenge),
       expectedOrigin: getEffectiveOrigin(),
       expectedRPID: getEffectiveRPID(),
       authenticator: {

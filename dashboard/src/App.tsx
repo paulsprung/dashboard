@@ -644,6 +644,7 @@ function DeviceForm({
   const [perms, setPerms] = useState<PermissionFlag[]>(initial?.requiredPermissions ?? []);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
+  const [showAdvancedPerms, setShowAdvancedPerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
 
@@ -816,15 +817,34 @@ function DeviceForm({
       </div>
 
       <div className="space-y-2">
-        <label className={`block text-sm font-medium ${t.muted}`}>Permissions (who can see this device)</label>
-        <div className="grid grid-cols-2 gap-1.5">
-          {ALL_PERMISSIONS.map(({ flag, label }) => (
-            <label key={flag} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm transition-all ${t.inputBg} ${t.navHover}`}>
-              <input type="checkbox" checked={perms.includes(flag)} onChange={() => togglePerm(flag)} className="rounded" />
-              <span className={t.text}>{label}</span>
-            </label>
-          ))}
+        <div className="flex items-center justify-between">
+          <label className={`block text-sm font-medium ${t.muted}`}>Visible to users with</label>
+          <button type="button" onClick={() => setShowAdvancedPerms((v) => !v)}
+            className="text-xs font-medium" style={{ color: accent }}>
+            {showAdvancedPerms ? 'Done' : 'Edit'}
+          </button>
         </div>
+        {!showAdvancedPerms ? (
+          <div className={`flex flex-wrap gap-1.5 rounded-xl px-3 py-2.5 ${t.inputBg}`}>
+            {perms.length === 0
+              ? <span className={`text-sm ${t.muted}`}>Everyone (no permission required)</span>
+              : perms.map((f) => (
+                  <span key={f} className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: `${accent}1A`, color: accent }}>
+                    {ALL_PERMISSIONS.find((p) => p.flag === f)?.label ?? f}
+                  </span>
+                ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {ALL_PERMISSIONS.map(({ flag, label }) => (
+              <label key={flag} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm transition-all ${t.inputBg} ${t.navHover}`}>
+                <input type="checkbox" checked={perms.includes(flag)} onChange={() => togglePerm(flag)} className="rounded" />
+                <span className={t.text}>{label}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <p className={`text-xs ${t.muted}`}>Grant these capabilities to users under Admin → Users &amp; Roles.</p>
       </div>
 
       <div className="flex gap-2 pt-1">
@@ -1789,12 +1809,15 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
 
-  const signIn = async () => {
+  // useEmail=false → usernameless/discoverable passkey (Apple-style one tap).
+  const signIn = async (useEmail: boolean) => {
     setLoading(true); setStatus('');
     try {
       const ch = await fetch('/api/auth/passkey/authentication-options', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(useEmail ? { email } : {}),
       });
       if (!ch.ok) return setStatus(`✗ ${await readErr(ch, 'Sign-in failed')}`);
       const assertion = await startAuthentication({ optionsJSON: await ch.json() });
@@ -1812,37 +1835,46 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
   return (
     <AuthPage title={setup.dashboardName} sub="Sign in with your passkey" accent={accent} t={t}>
       <div className="space-y-3">
-        <input
-          type="email" value={email} autoFocus
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn()}
-          placeholder="Email address"
-          className="focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all text-white placeholder-white/30"
-          style={{
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.14)',
-            '--accent-ring': `${accent}50`,
-          } as React.CSSProperties}
-        />
-        <StatusMsg msg={status} t={t} />
+        {/* Primary: one-tap passkey, no email needed */}
         <button
-          onClick={signIn}
-          disabled={!email.includes('@') || loading}
-          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[14px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-35"
+          onClick={() => signIn(false)} disabled={loading}
+          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[15px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
           style={{
             background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}CC 100%)`,
             boxShadow: `0 4px 24px ${accent}60, 0 1px 4px ${accent}40, inset 0 1px 0 rgba(255,255,255,0.25)`,
           }}>
-          {loading ? <Spinner size={18} color="white" /> : (
-            <>
-              <FaceIDIcon size={20} />
-              Sign in with passkey
-            </>
-          )}
+          {loading ? <Spinner size={18} color="white" /> : (<><FaceIDIcon size={20} /> Sign in with passkey</>)}
         </button>
-        <p className="text-center text-[12px] pt-1 text-white/35">
-          Touch ID · Face ID · Security key
-        </p>
+
+        <p className="text-center text-[12px] text-white/35">Touch ID · Face ID · Security key</p>
+
+        <StatusMsg msg={status} t={t} />
+
+        {/* Fallback: pick the account by email (for non-discoverable authenticators) */}
+        {!showEmail ? (
+          <button onClick={() => setShowEmail(true)}
+            className="mx-auto block pt-1 text-[12.5px] font-medium text-white/45 transition-colors hover:text-white/70">
+            Use email instead
+          </button>
+        ) : (
+          <div className="space-y-3 pt-1 animate-slide-up">
+            <div className="h-px w-full bg-white/10" />
+            <input
+              type="email" value={email} autoFocus
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && signIn(true)}
+              placeholder="Email address"
+              className="focus-accent w-full rounded-[14px] px-4 py-3.5 text-[15px] outline-none transition-all text-white placeholder-white/30"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', '--accent-ring': `${accent}50` } as React.CSSProperties}
+            />
+            <button
+              onClick={() => signIn(true)} disabled={!email.includes('@') || loading}
+              className="w-full rounded-[14px] py-3 text-[14px] font-semibold text-white/85 transition-all active:scale-[0.97] disabled:opacity-35"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)' }}>
+              Continue with email
+            </button>
+          </div>
+        )}
       </div>
     </AuthPage>
   );
@@ -1921,20 +1953,33 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] =
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, hiddenTabs, setHiddenTabs, devices, setDevices, widgets, setWidgets, t, s }: {
-  user: SessionUser; theme: ThemeMode; setTheme: (t: ThemeMode) => void;
-  accent: string; setAccent: (a: string) => void;
-  cardSize: CardSize; setCardSize: (c: CardSize) => void;
-  sidebarCompact: boolean; setSidebarCompact: (v: boolean) => void;
-  hiddenTabs: Tab[]; setHiddenTabs: (v: Tab[]) => void;
-  devices: Device[]; setDevices: (d: Device[]) => void;
-  widgets: Widget[]; setWidgets: (w: Widget[]) => void;
-  t: ReturnType<typeof tok>; s: ShellTokens;
+// Segmented sub-navigation used inside Settings / Admin.
+function SubNav<T extends string>({ items, value, onChange, accent, s }: {
+  items: { key: T; label: string; icon?: React.ReactNode }[]; value: T; onChange: (v: T) => void; accent: string; s: ShellTokens;
 }) {
-  const canAdmin = user.role === 'root' || user.role === 'admin';
+  const light = s.glass === 'glass-light';
+  return (
+    <div className="flex gap-1 rounded-[14px] p-1" style={{ background: light ? 'rgba(118,118,128,0.10)' : 'rgba(118,118,128,0.20)' }}>
+      {items.map((it) => {
+        const active = it.key === value;
+        return (
+          <button key={it.key} onClick={() => onChange(it.key)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] py-2 text-[13px] font-medium transition-all"
+            style={active ? { background: accent, color: '#fff', boxShadow: `0 2px 8px ${accent}44` } : { color: s.fgMuted }}>
+            {it.icon}{it.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Device management (add / discover / edit / delete) — admin only. Lives in Admin → Devices.
+function DeviceManager({ devices, setDevices, t, accent, s }: {
+  devices: Device[]; setDevices: (d: Device[]) => void; t: ReturnType<typeof tok>; accent: string; s: ShellTokens;
+}) {
   const [showDeviceForm, setShowDeviceForm] = useState(false);
   const [editDevice, setEditDevice] = useState<Device | null>(null);
-  const [showWidgetForm, setShowWidgetForm] = useState(false);
   const [devStatus, setDevStatus] = useState('');
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
@@ -1944,276 +1989,258 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
   const saveDevice = async (data: Omit<Device, 'id'>) => {
     if (editDevice) {
       const r = await fetch(`/api/devices/${editDevice.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify(data),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data),
       });
-      if (r.ok) {
-        const updated = (await r.json() as { device: Device }).device;
-        setDevices(devices.map((d) => d.id === updated.id ? updated : d));
-        setEditDevice(null);
-      } else { setDevStatus(`✗ ${await readErr(r, 'Failed to save')}`); }
+      if (r.ok) { const updated = (await r.json() as { device: Device }).device; setDevices(devices.map((d) => d.id === updated.id ? updated : d)); setEditDevice(null); }
+      else { setDevStatus(`✗ ${await readErr(r, 'Failed to save')}`); }
     } else {
       const r = await fetch('/api/devices', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify(data),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data),
       });
-      if (r.ok) {
-        const { device } = await r.json() as { device: Device };
-        setDevices([...devices, device]);
-        setShowDeviceForm(false);
-      } else { setDevStatus(`✗ ${await readErr(r, 'Failed to create')}`); }
+      if (r.ok) { const { device } = await r.json() as { device: Device }; setDevices([...devices, device]); setShowDeviceForm(false); }
+      else { setDevStatus(`✗ ${await readErr(r, 'Failed to create')}`); }
     }
   };
-
   const deleteDevice = async (id: string) => {
     const r = await fetch(`/api/devices/${id}`, { method: 'DELETE', credentials: 'include' });
     if (r.ok) setDevices(devices.filter((d) => d.id !== id));
   };
-
-  // Ask the Pi Agent to scan the LAN, then load the results.
   const runDiscovery = async () => {
-    setDiscovering(true);
-    setDevStatus('');
+    setDiscovering(true); setDevStatus('');
     try {
       const start = await fetch('/api/pi-agent/discover', { method: 'POST', credentials: 'include' });
       if (start.status === 400) { setDiscoverConfigured(false); setDevStatus('✗ No Pi Agent configured'); return; }
-      // The scan runs in the background on the Pi — give it a few seconds, then pull results
       await new Promise((r) => setTimeout(r, 6000));
       await loadDiscovered();
-    } catch {
-      setDevStatus('✗ Pi Agent unreachable');
-    } finally {
-      setDiscovering(false);
-    }
+    } catch { setDevStatus('✗ Pi Agent unreachable'); } finally { setDiscovering(false); }
   };
-
   const loadDiscovered = async () => {
     const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
     if (!r.ok) return;
     const d = await r.json() as { devices: DiscoveredDevice[]; configured: boolean };
-    setDiscoverConfigured(d.configured);
-    // Hide devices already configured (match by — best effort — type+hostname)
-    setDiscovered(d.devices ?? []);
+    setDiscoverConfigured(d.configured); setDiscovered(d.devices ?? []);
   };
-
-  // Pre-fill the device form from a discovered entry
   const addDiscovered = (dd: DiscoveredDevice) => {
     const type = dd.type === 'unknown' ? 'http' : dd.type;
-    setPrefill({
-      name: dd.hostname || `${type} ${dd.ip}`,
-      type,
-      config: { type, ip: dd.ip } as DeviceConfig,
-    });
-    setShowDeviceForm(true);
-    setEditDevice(null);
+    setPrefill({ name: dd.hostname || `${type} ${dd.ip}`, type, config: { type, ip: dd.ip } as DeviceConfig });
+    setShowDeviceForm(true); setEditDevice(null);
   };
+
+  return (
+    <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Devices</h2>
+        {!showDeviceForm && !editDevice && (
+          <div className="flex gap-2">
+            <Btn accent={accent} variant="secondary" size="sm" onClick={runDiscovery} loading={discovering}>🔍 Scan</Btn>
+            <Btn accent={accent} size="sm" onClick={() => { setPrefill(null); setShowDeviceForm(true); }}>+ Device</Btn>
+          </div>
+        )}
+      </div>
+
+      {devStatus && <StatusMsg msg={devStatus} t={t} />}
+
+      {discovered.length > 0 && !showDeviceForm && !editDevice && (
+        <div className={`rounded-xl border p-3 space-y-2 ${t.border}`} style={{ borderColor: `${accent}25`, backgroundColor: `${accent}06` }}>
+          <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} device(s) found on the network</p>
+          {discovered.map((dd, i) => (
+            <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
+                <div className="min-w-0">
+                  <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
+                  <p className={`text-xs ${t.muted}`}>{dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type} · {dd.via}</p>
+                </div>
+              </div>
+              <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
+            </div>
+          ))}
+        </div>
+      )}
+      {!discoverConfigured && <p className={`text-xs ${t.muted}`}>Device search requires a configured Pi Agent (PI_AGENT_URL).</p>}
+
+      {(showDeviceForm || editDevice) && (
+        <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
+          <p className={`mb-4 text-sm font-medium ${t.text}`}>{editDevice ? 'Edit device' : 'New device'}</p>
+          <DeviceForm
+            initial={editDevice ?? prefill ?? undefined}
+            onSave={async (data) => { await saveDevice(data); setPrefill(null); }}
+            onCancel={() => { setShowDeviceForm(false); setEditDevice(null); setPrefill(null); setDevStatus(''); }}
+            t={t} accent={accent}
+          />
+        </div>
+      )}
+
+      {devices.length === 0 && !showDeviceForm && <p className={`text-sm ${t.muted}`}>No devices configured yet.</p>}
+      <div className="space-y-2">
+        {devices.map((d) => (
+          <div key={d.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">{d.icon ?? deviceTypeIcon(d.type)}</span>
+              <div>
+                <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
+                <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
+                {d.tags && d.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {d.tags.map((tag) => (
+                      <span key={tag} className="rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: `${accent}16`, color: accent }}>#{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Btn accent={accent} variant="secondary" size="sm" onClick={() => { setEditDevice(d); setShowDeviceForm(false); }}>✎</Btn>
+              <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteDevice(d.id)}>×</Btn>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, hiddenTabs, setHiddenTabs, devices, widgets, setWidgets, onSignOut, t, s }: {
+  user: SessionUser; theme: ThemeMode; setTheme: (t: ThemeMode) => void;
+  accent: string; setAccent: (a: string) => void;
+  cardSize: CardSize; setCardSize: (c: CardSize) => void;
+  sidebarCompact: boolean; setSidebarCompact: (v: boolean) => void;
+  hiddenTabs: Tab[]; setHiddenTabs: (v: Tab[]) => void;
+  devices: Device[]; widgets: Widget[]; setWidgets: (w: Widget[]) => void;
+  onSignOut: () => void;
+  t: ReturnType<typeof tok>; s: ShellTokens;
+}) {
+  const canAdmin = user.role === 'root' || user.role === 'admin';
+  const [section, setSection] = useState<'profile' | 'appearance' | 'layout'>('profile');
+  const [showWidgetForm, setShowWidgetForm] = useState(false);
 
   const saveWidget = async (data: Omit<Widget, 'id' | 'userId'>) => {
-    const r = await fetch('/api/widgets', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', body: JSON.stringify(data),
-    });
-    if (r.ok) {
-      const { widget } = await r.json() as { widget: Widget };
-      setWidgets([...widgets, widget]);
-      setShowWidgetForm(false);
-    }
+    const r = await fetch('/api/widgets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
+    if (r.ok) { const { widget } = await r.json() as { widget: Widget }; setWidgets([...widgets, widget]); setShowWidgetForm(false); }
   };
-
   const deleteWidget = async (id: string) => {
     const r = await fetch(`/api/widgets/${id}`, { method: 'DELETE', credentials: 'include' });
     if (r.ok) setWidgets(widgets.filter((w) => w.id !== id));
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className={`text-xl font-semibold ${t.text}`}>Settings</h1>
+    <div className="space-y-5 max-w-2xl">
+      <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Settings</h1>
 
-      {/* Appearance */}
-      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-5`} style={{ boxShadow: s.cardShadow }}>
-        <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Appearance</h2>
+      <SubNav accent={accent} s={s} value={section} onChange={setSection}
+        items={[
+          { key: 'profile', label: 'Profile' },
+          { key: 'appearance', label: 'Appearance' },
+          { key: 'layout', label: 'Layout' },
+        ]} />
 
-        <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Theme</label>
-          <Segmented accent={accent} s={s} value={theme} onChange={setTheme}
-            options={[
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-              { value: 'ultra-dark', label: 'Ultra' },
-            ]} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Accent color</label>
-          <ColorPicker value={accent} onChange={setAccent} t={t} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Card size</label>
-          <Segmented accent={accent} s={s} value={cardSize} onChange={setCardSize}
-            options={(Object.keys(CARD_SIZE_CONFIG) as CardSize[]).map((c) => ({ value: c, label: CARD_SIZE_CONFIG[c].label }))} />
-          <p className="text-[12px]" style={{ color: s.fgFaint }}>Controls how large device cards appear on the Devices tab.</p>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 pt-1">
-          <div className="min-w-0">
-            <label className="block text-[14px] font-medium" style={{ color: s.fg }}>Compact sidebar</label>
-            <p className="text-[12px]" style={{ color: s.fgMuted }}>Show icons only, more room for content.</p>
-          </div>
-          <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Compact sidebar" />
-        </div>
-      </section>
-
-      {/* Visibility */}
-      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
-        <div>
-          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Visibility</h2>
-          <p className="mt-0.5 text-[12px]" style={{ color: s.fgMuted }}>Choose which sections appear in the sidebar.</p>
-        </div>
-        <div className="space-y-1">
-          {NAV.filter((n) => n.key !== 'home' && (!ADMIN_ONLY_TABS.includes(n.key) || canAdmin)).map((n) => {
-            const visible = !hiddenTabs.includes(n.key);
-            return (
-              <div key={n.key} className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-white"
-                    style={{ background: `linear-gradient(145deg, ${n.color}EE, ${n.color}BB)`, boxShadow: `0 2px 6px ${n.color}44` }}>
-                    {n.icon}
-                  </div>
-                  <span className="text-[14px] font-medium" style={{ color: s.fg }}>{n.label}</span>
-                </div>
-                <Toggle accent={accent} label={n.label} checked={visible}
-                  onChange={(v) => setHiddenTabs(v ? hiddenTabs.filter((k) => k !== n.key) : [...hiddenTabs, n.key])} />
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Widgets */}
-      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Widgets</h2>
-          {!showWidgetForm && (
-            <Btn accent={accent} size="sm" onClick={() => setShowWidgetForm(true)}>+ Widget</Btn>
-          )}
-        </div>
-
-        {showWidgetForm && (
-          <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
-            <WidgetForm onSave={saveWidget} onCancel={() => setShowWidgetForm(false)} devices={devices} t={t} accent={accent} />
-          </div>
-        )}
-
-        {widgets.length === 0 && !showWidgetForm && (
-          <p className={`text-sm ${t.muted}`}>No widgets yet. Add a widget to show it on the Home tab.</p>
-        )}
-        <div className="space-y-2">
-          {widgets.map((w) => (
-            <div key={w.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-lg">{
-                  w.config.type === 'clock' ? '🕐' :
-                  w.config.type === 'weather' ? '🌤' :
-                  w.config.type === 'device_toggle' ? '🔌' :
-                  w.config.type === 'wol_button' ? '⚡' :
-                  w.config.type === 'proxmox_vms' ? '🖥' : '📝'
-                }</span>
-                <div>
-                  <p className={`text-sm font-medium ${t.text}`}>
-                    {WIDGET_TYPE_OPTIONS.find((o) => o.value === w.config.type)?.label.replace(/^\S+\s/, '') ?? w.config.type}
-                  </p>
-                  <p className={`text-xs ${t.muted}`}>{w.layout.w}×{w.layout.h} units</p>
-                </div>
-              </div>
-              <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteWidget(w.id)}>×</Btn>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Devices (admin only) */}
-      {canAdmin && (
+      {section === 'profile' && (
         <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Manage devices</h2>
-            {!showDeviceForm && !editDevice && (
-              <div className="flex gap-2">
-                <Btn accent={accent} variant="secondary" size="sm" onClick={runDiscovery} loading={discovering}>
-                  🔍 Scan for devices
-                </Btn>
-                <Btn accent={accent} size="sm" onClick={() => { setPrefill(null); setShowDeviceForm(true); }}>+ Device</Btn>
+          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Profile</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full text-[20px] font-bold text-white"
+              style={{ background: `linear-gradient(135deg, ${accent}, ${accent}CC)`, boxShadow: `0 3px 12px ${accent}50` }}>
+              {user.email[0].toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold truncate" style={{ color: s.fg }}>{user.email}</p>
+              <p className="text-[13px] capitalize" style={{ color: s.fgMuted }}>{user.role}</p>
+            </div>
+          </div>
+          <div className={`rounded-xl px-4 py-3 ${t.inputBg}`}>
+            <p className="text-[13px] font-medium" style={{ color: s.fg }}>Passkey</p>
+            <p className="text-[12px] mt-0.5" style={{ color: s.fgMuted }}>You sign in with a passkey (Face ID / Touch ID / security key). No password is stored.</p>
+          </div>
+          <button onClick={onSignOut}
+            className="w-full rounded-[14px] py-3 text-[14px] font-semibold text-[#FF453A] transition-all active:scale-[0.98]"
+            style={{ background: 'rgba(255,69,58,0.12)', border: '1px solid rgba(255,69,58,0.2)' }}>
+            Sign out
+          </button>
+        </section>
+      )}
+
+      {section === 'appearance' && (
+        <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-5`} style={{ boxShadow: s.cardShadow }}>
+          <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Appearance</h2>
+          <div className="space-y-2">
+            <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Theme</label>
+            <Segmented accent={accent} s={s} value={theme} onChange={setTheme}
+              options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'ultra-dark', label: 'Ultra' }]} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Accent color</label>
+            <ColorPicker value={accent} onChange={setAccent} t={t} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-[13px] font-medium" style={{ color: s.fgMuted }}>Card size</label>
+            <Segmented accent={accent} s={s} value={cardSize} onChange={setCardSize}
+              options={(Object.keys(CARD_SIZE_CONFIG) as CardSize[]).map((c) => ({ value: c, label: CARD_SIZE_CONFIG[c].label }))} />
+            <p className="text-[12px]" style={{ color: s.fgFaint }}>Controls how large device cards appear on the Devices tab.</p>
+          </div>
+          <div className="flex items-center justify-between gap-4 pt-1">
+            <div className="min-w-0">
+              <label className="block text-[14px] font-medium" style={{ color: s.fg }}>Compact sidebar</label>
+              <p className="text-[12px]" style={{ color: s.fgMuted }}>Show icons only, more room for content.</p>
+            </div>
+            <Toggle checked={sidebarCompact} onChange={setSidebarCompact} accent={accent} label="Compact sidebar" />
+          </div>
+        </section>
+      )}
+
+      {section === 'layout' && (
+        <>
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
+            <div>
+              <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Visibility</h2>
+              <p className="mt-0.5 text-[12px]" style={{ color: s.fgMuted }}>Choose which sections appear in the sidebar.</p>
+            </div>
+            <div className="space-y-1">
+              {NAV.filter((n) => n.key !== 'home' && (!ADMIN_ONLY_TABS.includes(n.key) || canAdmin)).map((n) => {
+                const visible = !hiddenTabs.includes(n.key);
+                return (
+                  <div key={n.key} className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-white"
+                        style={{ background: `linear-gradient(145deg, ${n.color}EE, ${n.color}BB)`, boxShadow: `0 2px 6px ${n.color}44` }}>
+                        {n.icon}
+                      </div>
+                      <span className="text-[14px] font-medium" style={{ color: s.fg }}>{n.label}</span>
+                    </div>
+                    <Toggle accent={accent} label={n.label} checked={visible}
+                      onChange={(v) => setHiddenTabs(v ? hiddenTabs.filter((k) => k !== n.key) : [...hiddenTabs, n.key])} />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold" style={{ color: s.fg }}>Widgets</h2>
+              {!showWidgetForm && <Btn accent={accent} size="sm" onClick={() => setShowWidgetForm(true)}>+ Widget</Btn>}
+            </div>
+            {showWidgetForm && (
+              <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
+                <WidgetForm onSave={saveWidget} onCancel={() => setShowWidgetForm(false)} devices={devices} t={t} accent={accent} />
               </div>
             )}
-          </div>
-
-          {devStatus && <StatusMsg msg={devStatus} t={t} />}
-
-          {/* Discovery results */}
-          {discovered.length > 0 && !showDeviceForm && !editDevice && (
-            <div className={`rounded-xl border p-3 space-y-2 ${t.border}`} style={{ borderColor: `${accent}25`, backgroundColor: `${accent}06` }}>
-              <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} device(s) found on the network</p>
-              {discovered.map((dd, i) => (
-                <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
-                    <div className="min-w-0">
-                      <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
-                      <p className={`text-xs ${t.muted}`}>
-                        {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type} · {dd.via}
-                      </p>
+            {widgets.length === 0 && !showWidgetForm && <p className={`text-sm ${t.muted}`}>No widgets yet. Add a widget to show it on the Home tab.</p>}
+            <div className="space-y-2">
+              {widgets.map((w) => (
+                <div key={w.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">{w.config.type === 'clock' ? '🕐' : w.config.type === 'weather' ? '🌤' : w.config.type === 'device_toggle' ? '🔌' : w.config.type === 'wol_button' ? '⚡' : w.config.type === 'proxmox_vms' ? '🖥' : '📝'}</span>
+                    <div>
+                      <p className={`text-sm font-medium ${t.text}`}>{WIDGET_TYPE_OPTIONS.find((o) => o.value === w.config.type)?.label.replace(/^\S+\s/, '') ?? w.config.type}</p>
+                      <p className={`text-xs ${t.muted}`}>{w.layout.w}×{w.layout.h} units</p>
                     </div>
                   </div>
-                  <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
+                  <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteWidget(w.id)}>×</Btn>
                 </div>
               ))}
             </div>
-          )}
-          {!discoverConfigured && (
-            <p className={`text-xs ${t.muted}`}>Device search requires a configured Pi Agent (PI_AGENT_URL).</p>
-          )}
-
-          {(showDeviceForm || editDevice) && (
-            <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
-              <p className={`mb-4 text-sm font-medium ${t.text}`}>{editDevice ? 'Edit device' : 'New device'}</p>
-              <DeviceForm
-                initial={editDevice ?? prefill ?? undefined}
-                onSave={async (data) => { await saveDevice(data); setPrefill(null); }}
-                onCancel={() => { setShowDeviceForm(false); setEditDevice(null); setPrefill(null); setDevStatus(''); }}
-                t={t} accent={accent}
-              />
-            </div>
-          )}
-
-          {devices.length === 0 && !showDeviceForm && (
-            <p className={`text-sm ${t.muted}`}>No devices configured yet.</p>
-          )}
-          <div className="space-y-2">
-            {devices.map((d) => (
-              <div key={d.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{d.icon ?? deviceTypeIcon(d.type)}</span>
-                  <div>
-                    <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
-                    <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
-                    {d.tags && d.tags.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {d.tags.map((tag) => (
-                          <span key={tag} className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                            style={{ background: `${accent}16`, color: accent }}>#{tag}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Btn accent={accent} variant="secondary" size="sm" onClick={() => { setEditDevice(d); setShowDeviceForm(false); }}>✎</Btn>
-                  <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteDevice(d.id)}>×</Btn>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+          </section>
+        </>
       )}
     </div>
   );
@@ -2467,7 +2494,8 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
 
 // ── Admin tab ─────────────────────────────────────────────────────────────────
 
-function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens }) {
+function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens; devices: Device[]; setDevices: (d: Device[]) => void }) {
+  const [section, setSection] = useState<'devices' | 'users' | 'system'>('devices');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('user');
@@ -2530,15 +2558,21 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       credentials: 'include', body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
     });
-    if (!r.ok) setStatus(`✗ ${await readErr(r, 'Einladung fehlgeschlagen')}`);
+    if (!r.ok) setStatus(`✗ ${await readErr(r, 'Invitation failed')}`);
     else setInviteUrl((await r.json() as { inviteUrl: string }).inviteUrl);
     setInviteLoading(false);
   };
 
   return (
-    <div className="animate-slide-right space-y-6">
-      <h1 className={`text-xl font-semibold ${t.text}`}>Administration</h1>
+    <div className="animate-slide-right space-y-5 max-w-3xl">
+      <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Administration</h1>
 
+      <SubNav accent={accent} s={s} value={section} onChange={setSection}
+        items={[{ key: 'devices', label: 'Devices' }, { key: 'users', label: 'Users & Roles' }, { key: 'system', label: 'System' }]} />
+
+      {section === 'devices' && <DeviceManager devices={devices} setDevices={setDevices} t={t} accent={accent} s={s} />}
+
+      {section === 'users' && (<>
       {/* Invite */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div>
@@ -2588,7 +2622,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                     u.hasPasskey ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
-                  }`}>{u.hasPasskey ? 'Passkey' : 'Kein Passkey'}</span>
+                  }`}>{u.hasPasskey ? 'Passkey' : 'No passkey'}</span>
                   <span className={`text-xs ${t.muted}`}>›</span>
                 </div>
               </button>
@@ -2621,7 +2655,9 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
           )}
         </div>
       </section>
+      </>)}
 
+      {section === 'system' && (<>
       {/* Activity log (from Pi Agent) */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
         <div className="flex items-center justify-between">
@@ -2629,7 +2665,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
             <h2 className={`font-semibold ${t.text}`}>Activity log</h2>
             <p className={`mt-0.5 text-sm ${t.muted}`}>Internal events on the Pi Agent (device actions, config changes, hosts).</p>
           </div>
-          <Btn accent={accent} variant="secondary" size="sm" onClick={loadAudit} loading={auditLoading}>↻ Aktualisieren</Btn>
+          <Btn accent={accent} variant="secondary" size="sm" onClick={loadAudit} loading={auditLoading}>↻ Refresh</Btn>
         </div>
 
         {!auditConfigured ? (
@@ -2654,6 +2690,7 @@ function AdminTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string;
           </div>
         )}
       </section>
+      </>)}
     </div>
   );
 }
@@ -3264,8 +3301,9 @@ function Dashboard({ user, setup, onSignOut }: {
               cardSize={cardSize} setCardSize={setCardSize}
               sidebarCompact={sidebarCompact} setSidebarCompact={setSidebarCompact}
               hiddenTabs={hiddenTabs} setHiddenTabs={setHiddenTabs}
-              devices={devices} setDevices={setDevices}
+              devices={devices}
               widgets={widgets} setWidgets={setWidgets}
+              onSignOut={signOut}
               t={t} s={s}
             />
           )}
@@ -3275,7 +3313,7 @@ function Dashboard({ user, setup, onSignOut }: {
           )}
 
           {tab === 'admin' && canAdmin && (
-            <AdminTab t={t} accent={accent} s={s} />
+            <AdminTab t={t} accent={accent} s={s} devices={devices} setDevices={setDevices} />
           )}
 
         </div>{/* end key={tab} wrapper */}
