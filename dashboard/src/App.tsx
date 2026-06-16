@@ -45,6 +45,7 @@ type DeviceConfig =
   | { type: 'rdp'; ip: string; port?: number; username?: string }
   | { type: 'ssh'; ip: string; port?: number; username?: string }
   | { type: 'http'; ip: string; onPath: string; offPath?: string; method?: string }
+  | { type: 'web'; ip: string; port?: number; scheme?: 'http' | 'https'; path?: string }
   | { type: 'tasmota'; ip: string; channels?: number }
   | { type: 'docker'; ip: string; port?: number }
   | { type: 'tailscale'; apiKey: string; tailnet: string };
@@ -62,7 +63,8 @@ type DiscoveredDevice = {
   ip: string;
   mac?: string;
   hostname?: string;
-  type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'http' | 'unknown';
+  vendor?: string;
+  type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'web' | 'http' | 'unknown';
   via: 'arp' | 'mdns';
   discoveredAt: number;
 };
@@ -587,14 +589,15 @@ const DEVICE_TYPE_OPTIONS = [
   { value: 'rdp',          label: '🪟 Windows RDP' },
   { value: 'ssh',          label: '🐧 SSH / Linux' },
   { value: 'tailscale',    label: '🔒 Tailscale network' },
-  { value: 'http',         label: '🌐 HTTP device' },
+  { value: 'web',          label: '🌐 Web UI / Link (open)' },
+  { value: 'http',         label: '🔘 HTTP switch (on/off)' },
 ];
 
 const deviceTypeIcon = (type: string) => {
   const map: Record<string, string> = {
     shelly_plug: '🔌', shelly_light: '💡', tasmota: '🔌',
     wol: '⚡', proxmox: '🖥', docker: '🐳',
-    rdp: '🪟', ssh: '🐧', tailscale: '🔒', http: '🌐',
+    rdp: '🪟', ssh: '🐧', tailscale: '🔒', web: '🌐', http: '🔘',
   };
   return map[type] ?? '📱';
 };
@@ -604,7 +607,7 @@ const deviceTypePermission = (type: string): PermissionFlag | null => {
     shelly_plug: 'control:plugs', shelly_light: 'control:lights',
     tasmota: 'control:tasmota', wol: 'control:wol',
     proxmox: 'view:proxmox', docker: 'view:docker',
-    rdp: 'view:rdp', ssh: 'view:ssh',
+    rdp: 'view:rdp', ssh: 'view:ssh', web: 'view:console',
     tailscale: 'view:tailscale', http: 'control:http',
   };
   return map[type] ?? null;
@@ -637,6 +640,8 @@ function DeviceForm({
   const [port, setPort] = useState(String((initial?.config as any)?.port ?? ''));
   const [onPath, setOnPath] = useState((initial?.config as any)?.onPath ?? '/relay/0?turn=on');
   const [offPath, setOffPath] = useState((initial?.config as any)?.offPath ?? '/relay/0?turn=off');
+  const [webScheme, setWebScheme] = useState<string>((initial?.config as any)?.scheme ?? 'http');
+  const [webPath, setWebPath] = useState((initial?.config as any)?.path ?? '');
   const [tasmotaChannels, setTasmotaChannels] = useState(String((initial?.config as any)?.channels ?? '1'));
   const [dockerPort, setDockerPort] = useState(String((initial?.config as any)?.port ?? ''));
   const [tailscaleApiKey, setTailscaleApiKey] = useState((initial?.config as any)?.apiKey ?? '');
@@ -696,6 +701,7 @@ function DeviceForm({
     if (type === 'rdp') return { type, ip, username: username || undefined, port: port ? Number(port) : undefined };
     if (type === 'ssh') return { type, ip, username: username || undefined, port: port ? Number(port) : undefined };
     if (type === 'http') return { type, ip, onPath, offPath: offPath || undefined };
+    if (type === 'web') return { type, ip, port: port ? Number(port) : undefined, scheme: webScheme === 'https' ? 'https' : 'http', path: webPath || undefined };
     if (type === 'tasmota') return { type, ip, channels: Number(tasmotaChannels) || 1 };
     if (type === 'docker') return { type, ip, port: dockerPort ? Number(dockerPort) : undefined };
     if (type === 'tailscale') { if (!tailscaleApiKey || !tailscaleTailnet) return null; return { type, apiKey: tailscaleApiKey, tailnet: tailscaleTailnet }; }
@@ -769,6 +775,16 @@ function DeviceForm({
           <Input label="IP-Adresse" value={ip} onChange={setIp} placeholder="192.168.1.200" t={t} accent={accent} />
           <Input label="Path ON" value={onPath} onChange={setOnPath} placeholder="/relay/0?turn=on" t={t} accent={accent} />
           <Input label="Path OFF (opt.)" value={offPath} onChange={setOffPath} placeholder="/relay/0?turn=off" t={t} accent={accent} />
+        </div>
+      )}
+      {type === 'web' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <Input label="IP / Host" value={ip} onChange={setIp} placeholder="10.0.0.1" t={t} accent={accent} />
+            <Select label="Scheme" value={webScheme} onChange={setWebScheme} options={[{ value: 'http', label: 'http' }, { value: 'https', label: 'https' }]} t={t} accent={accent} />
+            <Input label="Port (opt.)" value={port} onChange={setPort} placeholder={webScheme === 'https' ? '443' : '80'} t={t} accent={accent} />
+          </div>
+          <Input label="Path (opt.)" value={webPath} onChange={setWebPath} placeholder="/" t={t} accent={accent} hint="Opens the device's web interface — e.g. a router, NAS or Proxmox." />
         </div>
       )}
       {type === 'tasmota' && (
@@ -2061,10 +2077,10 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
           {discovered.map((dd, i) => (
             <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
+                <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'web' : dd.type)}</span>
                 <div className="min-w-0">
-                  <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
-                  <p className={`text-xs ${t.muted}`}>{dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type} · {dd.via}</p>
+                  <p className={`text-sm truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</p>
+                  <p className={`text-xs ${t.muted}`}>{dd.ip}{dd.vendor ? ` · ${dd.vendor}` : ''} · {dd.type === 'unknown' ? 'web' : dd.type} · {dd.via}</p>
                 </div>
               </div>
               <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
@@ -2266,7 +2282,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
 type AccessGrant = { id: string; deviceId: string; label: string; ip: string; port: number; expiresAt: number; url: string };
 
 // Device types that expose a single reachable endpoint worth a "Connect" button.
-const ACCESSIBLE_TYPES = new Set(['proxmox', 'http', 'docker', 'rdp', 'ssh', 'shelly_plug', 'shelly_light', 'tasmota']);
+const ACCESSIBLE_TYPES = new Set(['proxmox', 'web', 'http', 'docker', 'rdp', 'ssh', 'shelly_plug', 'shelly_light', 'tasmota']);
 
 function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus>; s: ShellTokens; cardSize: CardSize; user: SessionUser }) {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
@@ -2457,6 +2473,9 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
                     )}
                     {(device.type === 'rdp' || device.type === 'ssh') && (
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Connect</Btn>
+                    )}
+                    {device.type === 'web' && (
+                      <Btn accent={accent} size="sm" onClick={() => doAction(device, 'open')}>🌐 Open</Btn>
                     )}
                     {device.type === 'http' && (
                       <>
@@ -2790,15 +2809,16 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     devices.some((d) => d.type === dd.type && (d.name === dd.hostname || d.name.includes(dd.ip)));
 
   const addDiscovered = async (dd: DiscoveredDevice) => {
-    const type = dd.type === 'unknown' ? 'http' : dd.type;
+    // Unknown / generic hosts default to a "web" device (open its UI), not an on/off switch.
+    const type = (dd.type === 'unknown' || dd.type === 'http') ? 'web' : dd.type;
     const suggested = deviceTypePermission(type);
-    const config = type === 'http'
-      ? { type, ip: dd.ip, onPath: '/' }
-      : { type, ip: dd.ip };
+    const config: DeviceConfig = type === 'web'
+      ? { type: 'web', ip: dd.ip }
+      : { type, ip: dd.ip } as DeviceConfig;
     const r = await fetch('/api/devices', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({
-        name: dd.hostname || `${type} ${dd.ip}`,
+        name: dd.hostname || dd.vendor || `${type} ${dd.ip}`,
         type, config,
         requiredPermissions: suggested ? [suggested] : [],
       }),
@@ -2910,11 +2930,13 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                     <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}
                       style={{ borderColor: `${accent}18` }}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'http' : dd.type)}</span>
+                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'web' : dd.type)}</span>
                         <div className="min-w-0">
-                          <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.ip}</p>
+                          <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</p>
                           <p className={`text-xs ${t.muted}`}>
-                            {dd.ip}{dd.mac ? ` · ${dd.mac}` : ''} · {dd.type === 'unknown' ? 'unknown' : dd.type}
+                            {dd.ip}
+                            {dd.vendor ? <span className="ml-1 rounded px-1 py-0.5" style={{ background: `${accent}1A`, color: accent }}>{dd.vendor}</span> : null}
+                            {' · '}{dd.type === 'unknown' ? 'web' : dd.type}
                             <span className="ml-1 opacity-60">({dd.via})</span>
                           </p>
                         </div>

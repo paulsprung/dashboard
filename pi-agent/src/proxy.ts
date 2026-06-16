@@ -11,6 +11,7 @@ export type DeviceConfig =
   | { type: 'rdp';          ip: string; port?: number; username?: string }
   | { type: 'ssh';          ip: string; port?: number; username?: string }
   | { type: 'http';         ip: string; onPath: string; offPath?: string; method?: string }
+  | { type: 'web';          ip: string; port?: number; scheme?: 'http' | 'https'; path?: string }
   | { type: 'tasmota';      ip: string; channels?: number }
   | { type: 'docker';       ip: string; port?: number }
   | { type: 'tailscale';    apiKey: string; tailnet: string };
@@ -140,6 +141,12 @@ export async function executeDeviceAction(
     const port = config.port ?? (protocol === 'rdp' ? 3389 : 22);
     const user = (config as { username?: string }).username;
     return { ok: true, url: `${protocol}://${user ? `${user}@` : ''}${config.ip}:${port}` };
+  }
+
+  if (config.type === 'web') {
+    const scheme = config.scheme ?? (config.port === 443 || config.port === 8443 ? 'https' : 'http');
+    const portPart = config.port && config.port !== 80 && config.port !== 443 ? `:${config.port}` : '';
+    return { ok: true, url: `${scheme}://${config.ip}${portPart}${config.path ?? ''}` };
   }
 
   if (config.type === 'http') {

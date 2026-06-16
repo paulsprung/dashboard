@@ -118,6 +118,8 @@ type ProxmoxConfig      = { type: 'proxmox'; ip: string; port?: number; tokenId:
 type RdpConfig          = { type: 'rdp'; ip: string; port?: number; username?: string };
 type SshConfig          = { type: 'ssh'; ip: string; port?: number; username?: string };
 type HttpConfig         = { type: 'http'; ip: string; onPath: string; offPath?: string; statusPath?: string; method?: 'GET' | 'POST' };
+// Web: a device you open/connect to (router, NAS, web UI) — not an on/off switch
+type WebConfig          = { type: 'web'; ip: string; port?: number; scheme?: 'http' | 'https'; path?: string };
 // Tasmota: works with NOUS A5T, Sonoff, Gosund, and any Tasmota-based device
 type TasmotaConfig      = { type: 'tasmota'; ip: string; channels?: number };
 // Docker: remote daemon via TCP (enable with dockerd -H tcp://0.0.0.0:2375)
@@ -125,7 +127,7 @@ type DockerConfig       = { type: 'docker'; ip: string; port?: number };
 // Tailscale: uses official Tailscale API
 type TailscaleConfig    = { type: 'tailscale'; apiKey: string; tailnet: string };
 
-type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | TasmotaConfig | DockerConfig | TailscaleConfig;
+type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | WebConfig | TasmotaConfig | DockerConfig | TailscaleConfig;
 
 type DeviceType = DeviceConfig['type'];
 
@@ -1067,6 +1069,12 @@ app.post('/api/devices/:id/action', async (req, res) => {
       const port = cfg.port ?? (protocol === 'rdp' ? 3389 : 22);
       const url = `${protocol}://${(cfg as RdpConfig).username ? `${(cfg as RdpConfig).username}@` : ''}${cfg.ip}:${port}`;
       return res.json({ ok: true, url });
+    }
+
+    if (cfg.type === 'web') {
+      const scheme = cfg.scheme ?? (cfg.port === 443 || cfg.port === 8443 ? 'https' : 'http');
+      const portPart = cfg.port && cfg.port !== 80 && cfg.port !== 443 ? `:${cfg.port}` : '';
+      return res.json({ ok: true, url: `${scheme}://${cfg.ip}${portPart}${cfg.path ?? ''}` });
     }
 
     if (cfg.type === 'http') {

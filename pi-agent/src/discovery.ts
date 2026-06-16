@@ -6,7 +6,8 @@ export type DiscoveredDevice = {
   ip: string;
   mac?: string;
   hostname?: string;
-  type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'http' | 'unknown';
+  vendor?: string;
+  type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'web' | 'http' | 'unknown';
   info?: Record<string, unknown>;
   discoveredAt: number;
   via: 'arp' | 'mdns';
@@ -14,6 +15,45 @@ export type DiscoveredDevice = {
 
 let lastResults: DiscoveredDevice[] = [];
 const mdnsCache = new Map<string, { hostname: string; type: DiscoveredDevice['type'] }>();
+
+// ── MAC vendor (OUI) lookup ────────────────────────────────────────────────────
+// A small curated map of common smart-home / consumer prefixes — enough to tell a
+// Fritzbox from a Hue bridge from an ESP plug from a phone, even with no open ports.
+const OUI: Record<string, string> = {
+  '001788': 'Philips Hue', 'ecb5fa': 'Philips Hue',
+  '38a28a': 'AVM (FRITZ!Box)', '3810d5': 'AVM (FRITZ!Box)', '647002': 'AVM (FRITZ!Box)',
+  '5c4979': 'AVM (FRITZ!Box)', '9cc7a6': 'AVM (FRITZ!Box)', 'c02506': 'AVM (FRITZ!Box)',
+  'e0286d': 'AVM (FRITZ!Box)', 'ec086b': 'AVM (FRITZ!Box)', '08961d': 'AVM (FRITZ!Box)',
+  'b827eb': 'Raspberry Pi', 'dca632': 'Raspberry Pi', 'e45f01': 'Raspberry Pi', '28cdc1': 'Raspberry Pi',
+  '246f28': 'Espressif (ESP)', '30aea4': 'Espressif (ESP)', '3c6105': 'Espressif (ESP)',
+  '483fda': 'Espressif (ESP)', '5ccf7f': 'Espressif (ESP)', '7c9ebd': 'Espressif (ESP)',
+  '84cca8': 'Espressif (ESP)', '8caab5': 'Espressif (ESP)', 'a4cf12': 'Espressif (ESP)',
+  'b4e62d': 'Espressif (ESP)', 'bcddc2': 'Espressif (ESP)', 'c44f33': 'Espressif (ESP)',
+  'cc50e3': 'Espressif (ESP)', 'd8a01d': 'Espressif (ESP)', 'dc4f22': 'Espressif (ESP)',
+  'ecfabc': 'Espressif (ESP)', '2462ab': 'Espressif (ESP)',
+  'd073d5': 'Shelly / Allterco', '349454': 'Shelly / Allterco',
+  '001132': 'Synology', '0011d8': 'Asustek', '244bfe': 'Asustek',
+  '001599': 'Samsung', '5cf370': 'Samsung', 'a48431': 'Samsung',
+  'f0189': 'Apple', 'a483e7': 'Apple', '3c0630': 'Apple', '04d6aa': 'Apple', 'acbc32': 'Apple',
+  '001a11': 'Google', 'f4f5d8': 'Google', '1c53f9': 'Amazon', 'f0272d': 'Amazon',
+  '0017c8': 'TP-Link', '50c7bf': 'TP-Link', 'b0be76': 'TP-Link',
+  '0418d6': 'Ubiquiti', '24a43c': 'Ubiquiti', 'fcecda': 'Ubiquiti',
+  '001a79': 'Sonoff / Itead',
+};
+function ouiVendor(mac?: string): string | undefined {
+  if (!mac) return undefined;
+  return OUI[mac.replace(/:/g, '').slice(0, 6).toLowerCase()];
+}
+
+// Read a web device's <title> / Server header for a human-friendly name (HTTP only).
+async function fetchWebTitle(ip: string): Promise<string | undefined> {
+  try {
+    const r = await fetch(`http://${ip}/`, { signal: AbortSignal.timeout(1500), redirect: 'manual' } as any);
+    const html = await r.text();
+    const m = html.match(/<title>\s*([^<]{1,80}?)\s*<\/title>/i);
+    return (m?.[1]?.trim()) || (r.headers.get('server') ?? undefined) || undefined;
+  } catch { return undefined; }
+}
 
 // ── ARP table ────────────────────────────────────────────────────────────────
 
@@ -111,9 +151,11 @@ async function fingerprintIp(ip: string): Promise<Omit<DiscoveredDevice, 'ip' | 
   const proxmoxOpen = await tcpProbe(ip, 8006, 1500);
   if (proxmoxOpen) return { type: 'proxmox', hostname: mdnsHint?.hostname };
 
-  // Generic HTTP
-  const httpOpen = await tcpProbe(ip, 80, 1000);
-  if (httpOpen) return { type: 'http' };
+  // Generic web UI (something you connect to, not switch on/off) — grab its title.
+  if (await tcpProbe(ip, 80, 900)) {
+    return { type: 'web', hostname: (await fetchWebTitle(ip)) ?? mdnsHint?.hostname };
+  }
+  if (await tcpProbe(ip, 443, 900)) return { type: 'web', hostname: mdnsHint?.hostname };
 
   return { type: 'unknown' };
 }
@@ -173,6 +215,7 @@ export async function runDiscovery(subnet?: string): Promise<DiscoveredDevice[]>
         const mdnsHint = mdnsCache.get(ip);
         return {
           ip, mac,
+          vendor: ouiVendor(mac),
           hostname: fingerprint.hostname ?? mdnsHint?.hostname,
           type: fingerprint.type,
           info: fingerprint.info,
