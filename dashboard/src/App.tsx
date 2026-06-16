@@ -1808,56 +1808,71 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
   const accent = setup.accent;
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [showEmail, setShowEmail] = useState(false);
+  const busy = phase === 'loading' || phase === 'success';
+
+  const resetSoon = () => setTimeout(() => setPhase('idle'), 1600);
 
   // useEmail=false → usernameless/discoverable passkey (Apple-style one tap).
   const signIn = async (useEmail: boolean) => {
-    setLoading(true); setStatus('');
+    setPhase('loading'); setStatus('');
     try {
       const ch = await fetch('/api/auth/passkey/authentication-options', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(useEmail ? { email } : {}),
       });
-      if (!ch.ok) return setStatus(`✗ ${await readErr(ch, 'Sign-in failed')}`);
+      if (!ch.ok) { setStatus(`✗ ${await readErr(ch, 'Sign-in failed')}`); setPhase('error'); resetSoon(); return; }
       const assertion = await startAuthentication({ optionsJSON: await ch.json() });
       const verify = await fetch('/api/auth/passkey/verify-authentication', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify(assertion),
       });
-      if (!verify.ok) return setStatus(`✗ ${await readErr(verify, 'Sign-in failed')}`);
-      onLogin((await verify.json() as { user: SessionUser }).user);
+      if (!verify.ok) { setStatus(`✗ ${await readErr(verify, 'Sign-in failed')}`); setPhase('error'); resetSoon(); return; }
+      const user = (await verify.json() as { user: SessionUser }).user;
+      setPhase('success');
+      setTimeout(() => onLogin(user), 850);
     } catch (e: any) {
-      if (e?.name !== 'NotAllowedError') setStatus('✗ Sign-in failed or cancelled.');
-    } finally { setLoading(false); }
+      if (e?.name === 'NotAllowedError') { setPhase('idle'); }
+      else { setStatus('✗ Sign-in failed or cancelled.'); setPhase('error'); resetSoon(); }
+    }
   };
+
+  const bg = phase === 'success' ? 'linear-gradient(150deg,#34D058,#28A745)'
+    : phase === 'error' ? 'linear-gradient(150deg,#FF6961,#D70015)'
+    : `linear-gradient(150deg, ${accent}FF, ${accent}CC)`;
+  const label = phase === 'loading' ? 'Authenticating…' : phase === 'success' ? 'Welcome back'
+    : phase === 'error' ? (status.replace(/^✗ /, '') || 'Try again') : 'Tap to sign in';
 
   return (
     <AuthPage title={setup.dashboardName} sub="Sign in with your passkey" accent={accent} t={t}>
-      <div className="space-y-3">
-        {/* Primary: one-tap passkey, no email needed */}
+      <div className="flex flex-col items-center space-y-5">
+        {/* Big round passkey button with state animations */}
         <button
-          onClick={() => signIn(false)} disabled={loading}
-          className="w-full flex items-center justify-center gap-2.5 rounded-[16px] py-[15px] text-[15px] font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-          style={{
-            background: `linear-gradient(150deg, ${accent}FF 0%, ${accent}CC 100%)`,
-            boxShadow: `0 4px 24px ${accent}60, 0 1px 4px ${accent}40, inset 0 1px 0 rgba(255,255,255,0.25)`,
-          }}>
-          {loading ? <Spinner size={18} color="white" /> : (<><FaceIDIcon size={20} /> Sign in with passkey</>)}
+          onClick={() => signIn(false)} disabled={busy} aria-label="Sign in with passkey"
+          className={`relative flex h-28 w-28 items-center justify-center rounded-full text-white transition-[background,transform] duration-300 active:scale-95 disabled:active:scale-100
+            ${phase === 'error' ? 'animate-shake' : ''} ${phase === 'success' ? 'animate-login-pop' : ''}`}
+          style={{ background: bg, boxShadow: `0 10px 36px ${phase === 'success' ? 'rgba(40,167,69,0.5)' : phase === 'error' ? 'rgba(215,0,21,0.45)' : `${accent}66`}, inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -2px 0 rgba(0,0,0,0.18)` }}>
+          {phase === 'idle' && <span className="login-ring pointer-events-none absolute inset-0 rounded-full" style={{ boxShadow: `0 0 0 3px ${accent}` }} />}
+          {phase === 'loading' ? <Spinner size={34} color="#fff" />
+            : phase === 'success' ? (
+              <svg width="52" height="52" viewBox="0 0 24 24" fill="none"><path className="draw-check" d="M5 12.5l4.2 4.2L19 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            ) : phase === 'error' ? (
+              <svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M7 7l10 10M17 7L7 17" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" /></svg>
+            ) : <FaceIDIcon size={46} />}
         </button>
 
-        <p className="text-center text-[12px] text-white/35">Touch ID · Face ID · Security key</p>
-
-        <StatusMsg msg={status} t={t} />
+        <p className="text-center text-[14px] font-medium" style={{ color: phase === 'error' ? '#FF6961' : 'rgba(255,255,255,0.7)' }}>{label}</p>
+        <p className="text-center text-[12px] text-white/30 -mt-2">Touch ID · Face ID · Security key</p>
 
         {/* Fallback: pick the account by email (for non-discoverable authenticators) */}
         {!showEmail ? (
-          <button onClick={() => setShowEmail(true)}
-            className="mx-auto block pt-1 text-[12.5px] font-medium text-white/45 transition-colors hover:text-white/70">
+          <button onClick={() => setShowEmail(true)} disabled={busy}
+            className="text-[12.5px] font-medium text-white/45 transition-colors hover:text-white/70 disabled:opacity-40">
             Use email instead
           </button>
         ) : (
-          <div className="space-y-3 pt-1 animate-slide-up">
+          <div className="w-full space-y-3 animate-slide-up">
             <div className="h-px w-full bg-white/10" />
             <input
               type="email" value={email} autoFocus
@@ -1868,7 +1883,7 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', '--accent-ring': `${accent}50` } as React.CSSProperties}
             />
             <button
-              onClick={() => signIn(true)} disabled={!email.includes('@') || loading}
+              onClick={() => signIn(true)} disabled={!email.includes('@') || busy}
               className="w-full rounded-[14px] py-3 text-[14px] font-semibold text-white/85 transition-all active:scale-[0.97] disabled:opacity-35"
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)' }}>
               Continue with email
@@ -3260,7 +3275,7 @@ function Dashboard({ user, setup, onSignOut }: {
                   const rowPx = widget.layout.h === 1 ? 128 : widget.layout.h === 2 ? 176 : 256;
                   return (
                     <div key={widget.id}
-                      className={`animate-slide-up delay-${Math.min(i, 6)} ${editMode ? 'animate-edit-wiggle' : ''}`}
+                      className={`animate-slide-up delay-${Math.min(i, 6)}`}
                       style={{ gridColumn: `span ${colSpan} / span ${colSpan}` }}>
                       <div className={`relative ${editMode ? 'edit-outline' : ''}`} style={{ height: rowPx }}>
                         <WidgetRenderer widget={widget} devices={devices} t={t} accent={accent}
