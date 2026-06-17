@@ -853,6 +853,7 @@ function WidgetForm({
   const [showSeconds, setShowSeconds] = useState(false);
   const [showDate, setShowDate] = useState(true);
   const [location, setLocation] = useState('');
+  const [weatherUnit, setWeatherUnit] = useState<'C' | 'F'>('C');
   const [deviceId, setDeviceId] = useState(devices[0]?.id ?? '');
   const [wolLabel, setWolLabel] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
@@ -863,7 +864,7 @@ function WidgetForm({
 
   const buildConfig = (): WidgetConfig | null => {
     if (wtype === 'clock') return { type: 'clock', format, showSeconds, showDate };
-    if (wtype === 'weather') return { type: 'weather', location: location || undefined };
+    if (wtype === 'weather') return { type: 'weather', location: location || undefined, unit: weatherUnit };
     if (wtype === 'device_toggle') { if (!deviceId) return null; return { type: 'device_toggle', deviceId }; }
     if (wtype === 'wol_button') { if (!deviceId) return null; return { type: 'wol_button', deviceId, label: wolLabel || undefined }; }
     if (wtype === 'proxmox_vms') { if (!deviceId) return null; return { type: 'proxmox_vms', deviceId }; }
@@ -906,7 +907,11 @@ function WidgetForm({
         </div>
       )}
       {wtype === 'weather' && (
-        <Input label="Location (opt.)" value={location} onChange={setLocation} placeholder="Berlin" t={t} accent={accent} />
+        <div className="grid grid-cols-[1fr_auto] gap-3">
+          <Input label="Location" value={location} onChange={setLocation} placeholder="Berlin" t={t} accent={accent} />
+          <Select label="Unit" value={weatherUnit} onChange={(v) => setWeatherUnit(v as 'C' | 'F')}
+            options={[{ value: 'C', label: '°C' }, { value: 'F', label: '°F' }]} t={t} accent={accent} />
+        </div>
       )}
       {(wtype === 'device_toggle' || wtype === 'proxmox_vms') && (
         deviceOptions.length > 0
@@ -999,12 +1004,100 @@ function ClockWidget({ config, t, accent }: { config: Extract<WidgetConfig, { ty
   );
 }
 
+// Map WMO weather codes (Open-Meteo) to an emoji + short label.
+const wmo = (code: number): { icon: string; label: string } => {
+  if (code === 0) return { icon: '☀️', label: 'Clear' };
+  if (code <= 2) return { icon: '⛅', label: 'Partly cloudy' };
+  if (code === 3) return { icon: '☁️', label: 'Overcast' };
+  if (code <= 48) return { icon: '🌫️', label: 'Fog' };
+  if (code <= 57) return { icon: '🌦️', label: 'Drizzle' };
+  if (code <= 67) return { icon: '🌧️', label: 'Rain' };
+  if (code <= 77) return { icon: '❄️', label: 'Snow' };
+  if (code <= 82) return { icon: '🌦️', label: 'Showers' };
+  if (code <= 86) return { icon: '🌨️', label: 'Snow showers' };
+  return { icon: '⛈️', label: 'Thunderstorm' };
+};
+
+type WeatherData = {
+  place: string; tempNow: number; code: number;
+  days: { d: string; min: number; max: number; code: number }[];
+};
+
 function WeatherWidget({ config, t, accent }: { config: Extract<WidgetConfig, { type: 'weather' }>; t: ReturnType<typeof tok>; accent: string }) {
+  const unit = config.unit ?? 'C';
+  const [data, setData] = useState<WeatherData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!config.location) { setData(null); setErr(null); return; }
+    let cancelled = false;
+    (async () => {
+      setErr(null);
+      try {
+        // Open-Meteo: free, keyless, CORS-enabled. Geocode the place name, then fetch forecast.
+        const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(config.location!)}&count=1`)
+          .then((r) => r.json());
+        const hit = geo?.results?.[0];
+        if (!hit) { if (!cancelled) setErr('Place not found'); return; }
+        const tempUnit = unit === 'F' ? 'fahrenheit' : 'celsius';
+        const fc = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${hit.latitude}&longitude=${hit.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=3&temperature_unit=${tempUnit}&timezone=auto`)
+          .then((r) => r.json());
+        if (cancelled) return;
+        setData({
+          place: [hit.name, hit.country_code].filter(Boolean).join(', '),
+          tempNow: Math.round(fc.current.temperature_2m),
+          code: fc.current.weather_code,
+          days: (fc.daily?.time ?? []).map((iso: string, i: number) => ({
+            d: new Date(iso).toLocaleDateString(undefined, { weekday: 'short' }),
+            min: Math.round(fc.daily.temperature_2m_min[i]),
+            max: Math.round(fc.daily.temperature_2m_max[i]),
+            code: fc.daily.weather_code[i],
+          })),
+        });
+      } catch { if (!cancelled) setErr('Weather unavailable'); }
+    })();
+    return () => { cancelled = true; };
+  }, [config.location, unit]);
+
+  if (!config.location) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+        <span className="text-4xl">🌤</span>
+        <p className={`text-xs ${t.muted}`}>Set a location in the widget settings</p>
+      </div>
+    );
+  }
+  if (err) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+        <span className="text-3xl">🌧️</span>
+        <p className={`text-sm font-medium ${t.text}`}>{config.location}</p>
+        <p className="text-xs text-red-500">{err}</p>
+      </div>
+    );
+  }
+  if (!data) return <div className="flex h-full items-center justify-center"><Spinner size={20} color={accent} /></div>;
+
+  const now = wmo(data.code);
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2">
-      <span className="text-5xl">🌤</span>
-      <p className={`text-sm font-medium ${t.text}`}>{config.location ?? 'Current location'}</p>
-      <p className={`text-xs ${t.muted}`}>Weather API not configured</p>
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-4xl leading-none">{now.icon}</span>
+        <div className="min-w-0">
+          <p className={`text-2xl font-semibold leading-none ${t.text}`}>{data.tempNow}°{unit}</p>
+          <p className={`text-xs truncate ${t.muted}`}>{now.label} · {data.place}</p>
+        </div>
+      </div>
+      <div className="mt-auto flex justify-between gap-1">
+        {data.days.map((d, i) => (
+          <div key={i} className="flex flex-1 flex-col items-center gap-0.5">
+            <span className={`text-[10px] ${t.muted}`}>{i === 0 ? 'Today' : d.d}</span>
+            <span className="text-base leading-none">{wmo(d.code).icon}</span>
+            <span className={`text-[10px] tabular-nums ${t.text}`}>{d.max}°</span>
+            <span className={`text-[10px] tabular-nums ${t.muted}`}>{d.min}°</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2090,6 +2183,63 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
   );
 }
 
+type UserSession = { id: string; createdAt: number | null; expiresAt: number; userAgent: string | null; current: boolean };
+
+// Turn a raw User-Agent string into something human ("Safari · iPhone").
+const prettyUA = (ua: string | null): string => {
+  if (!ua) return 'Unknown device';
+  const browser = /Edg/.test(ua) ? 'Edge' : /OPR|Opera/.test(ua) ? 'Opera' : /Chrome/.test(ua) ? 'Chrome'
+    : /Firefox/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  return [browser, os].filter(Boolean).join(' · ');
+};
+
+function SessionsCard({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens }) {
+  const [list, setList] = useState<UserSession[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/auth/sessions', { credentials: 'include' });
+      if (r.ok) setList((await r.json() as { sessions: UserSession[] }).sessions);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+
+  const revoke = async (id: string) => {
+    const r = await fetch(`/api/auth/sessions/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (r.ok) setList(list.filter((x) => x.id !== id));
+  };
+
+  return (
+    <div className={`rounded-xl px-4 py-3 ${t.inputBg} space-y-2`}>
+      <p className="text-[13px] font-medium" style={{ color: s.fg }}>Active sessions</p>
+      {loading ? <Spinner size={16} color={accent} /> : list.length === 0 ? (
+        <p className="text-[12px]" style={{ color: s.fgMuted }}>No active sessions.</p>
+      ) : list.map((sess) => (
+        <div key={sess.id} className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium truncate" style={{ color: s.fg }}>
+              {prettyUA(sess.userAgent)}
+              {sess.current && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold" style={{ background: `${accent}22`, color: accent }}>this device</span>}
+            </p>
+            <p className="text-[11px]" style={{ color: s.fgMuted }}>
+              {sess.createdAt ? `Signed in ${new Date(sess.createdAt).toLocaleString()}` : 'Active'}
+            </p>
+          </div>
+          {!sess.current && (
+            <button onClick={() => revoke(sess.id)}
+              className="flex-shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-[#FF453A]"
+              style={{ background: 'rgba(255,69,58,0.12)' }}>Revoke</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, setCardSize, sidebarCompact, setSidebarCompact, hiddenTabs, setHiddenTabs, devices, widgets, setWidgets, onSignOut, t, s }: {
   user: SessionUser; theme: ThemeMode; setTheme: (t: ThemeMode) => void;
   accent: string; setAccent: (a: string) => void;
@@ -2141,6 +2291,7 @@ function SettingsPanel({ user, theme, setTheme, accent, setAccent, cardSize, set
             <p className="text-[13px] font-medium" style={{ color: s.fg }}>Passkey</p>
             <p className="text-[12px] mt-0.5" style={{ color: s.fgMuted }}>You sign in with a passkey (Face ID / Touch ID / security key). No password is stored.</p>
           </div>
+          <SessionsCard t={t} accent={accent} s={s} />
           <button onClick={onSignOut}
             className="w-full rounded-[14px] py-3 text-[14px] font-semibold text-[#FF453A] transition-all active:scale-[0.98]"
             style={{ background: 'rgba(255,69,58,0.12)', border: '1px solid rgba(255,69,58,0.2)' }}>
@@ -2583,7 +2734,7 @@ function AccessGroupForm({ initial, users, devices, t, accent, onSave, onCancel 
   );
 }
 
-function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens; devices: Device[]; setDevices: (d: Device[]) => void }) {
+function AdminTab({ t, accent, s, devices, setDevices, user }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens; devices: Device[]; setDevices: (d: Device[]) => void; user: SessionUser }) {
   const [section, setSection] = useState<'devices' | 'users' | 'system'>('devices');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -2617,6 +2768,14 @@ function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof 
   const loadUsers = async () => {
     const r = await fetch('/api/admin/users', { credentials: 'include' });
     if (r.ok) setAdminUsers((await r.json() as { users: AdminUser[] }).users);
+  };
+
+  const deleteUser = async (u: AdminUser) => {
+    if (!confirm(`Delete ${u.email}? Their passkeys, sessions and group memberships are removed.`)) return;
+    const r = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE', credentials: 'include' });
+    if (r.ok) { setAdminUsers(adminUsers.filter((x) => x.id !== u.id)); await loadGroups(); setStatus(`✓ ${u.email} deleted`); }
+    else setStatus(`✗ ${await readErr(r, 'Could not delete user')}`);
+    setTimeout(() => setStatus(''), 3000);
   };
 
   const loadGroups = async () => {
@@ -2711,9 +2870,14 @@ function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof 
                       : ' · full access'}
                   </p>
                 </div>
-                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  u.hasPasskey ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
-                }`}>{u.hasPasskey ? 'Passkey' : 'No passkey'}</span>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    u.hasPasskey ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
+                  }`}>{u.hasPasskey ? 'Passkey' : 'No passkey'}</span>
+                  {u.role !== 'root' && u.email !== user.email && (
+                    <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteUser(u)}>×</Btn>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -3544,7 +3708,7 @@ function Dashboard({ user, setup, onSignOut }: {
           )}
 
           {tab === 'admin' && canAdmin && (
-            <AdminTab t={t} accent={accent} s={s} devices={devices} setDevices={setDevices} />
+            <AdminTab t={t} accent={accent} s={s} devices={devices} setDevices={setDevices} user={user} />
           )}
 
         </div>{/* end key={tab} wrapper */}

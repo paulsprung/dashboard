@@ -189,7 +189,7 @@ type UserRecord = {
 
 const usersByEmail = new Map<string, UserRecord>();
 
-type SessionEntry = { userId: string; expiresAt: number };
+type SessionEntry = { userId: string; expiresAt: number; createdAt?: number; userAgent?: string };
 const sessions = new Map<string, SessionEntry>();
 
 type InviteRecord = { email: string; role: UserRole; expiresAt: number; used: boolean };
@@ -326,9 +326,9 @@ const parseCookies = (cookieHeader?: string): Record<string, string> => {
   }, {});
 };
 
-const createSession = (userId: string) => {
+const createSession = (userId: string, userAgent?: string) => {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessions.set(token, { userId, expiresAt: Date.now() + SESSION_TTL_MS });
+  sessions.set(token, { userId, expiresAt: Date.now() + SESSION_TTL_MS, createdAt: Date.now(), userAgent: userAgent?.slice(0, 200) });
   void persistState();
   return token;
 };
@@ -749,7 +749,7 @@ app.post('/api/auth/passkey/verify-authentication', async (req, res) => {
   void persistState();
 
   const loginUserId = Buffer.from(user.id).toString('base64url');
-  const loginSessionToken = createSession(loginUserId);
+  const loginSessionToken = createSession(loginUserId, req.headers['user-agent']);
   const isSecure = !origin.startsWith('http://localhost');
   res.setHeader('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(loginSessionToken)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_MS / 1000}${isSecure ? '; Secure' : ''}`);
 
@@ -777,6 +777,42 @@ app.post('/api/auth/logout', (req, res) => {
   const isSecure = !origin.startsWith('http://localhost');
   res.setHeader('Set-Cookie', `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${isSecure ? '; Secure' : ''}`);
   return res.json({ ok: true });
+});
+
+// Active sessions for the current user. A non-secret id (hash of the token) is exposed
+// so a session can be revoked from the UI without ever leaking the session token itself.
+const sessionPublicId = (token: string) => crypto.createHash('sha256').update(token).digest('base64url').slice(0, 16);
+
+app.get('/api/auth/sessions', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  const currentToken = parseCookies(req.headers.cookie)[sessionCookieName];
+  const list = [...sessions.entries()]
+    .filter(([, e]) => e.userId === userId && e.expiresAt > Date.now())
+    .map(([token, e]) => ({
+      id: sessionPublicId(token),
+      createdAt: e.createdAt ?? null,
+      expiresAt: e.expiresAt,
+      userAgent: e.userAgent ?? null,
+      current: token === currentToken,
+    }))
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  return res.json({ sessions: list });
+});
+
+app.delete('/api/auth/sessions/:id', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  for (const [token, e] of sessions) {
+    if (e.userId === userId && sessionPublicId(token) === req.params.id) {
+      sessions.delete(token);
+      void persistState();
+      return res.json({ ok: true });
+    }
+  }
+  return res.status(404).json({ error: 'Session not found' });
 });
 
 app.get('/api/auth/health', (_req, res) => {
@@ -1376,6 +1412,27 @@ app.patch('/api/admin/groups/:id', (req, res) => {
 app.delete('/api/admin/groups/:id', (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   if (!accessGroups.delete(req.params.id)) return res.status(404).json({ error: 'Group not found' });
+  void persistState();
+  return res.json({ ok: true });
+});
+
+// Remove a user entirely: their passkeys, sessions, widgets and group memberships.
+// Guards: only admins, can't delete yourself or a root account.
+app.delete('/api/admin/users/:id', (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !(actor.role === 'root' || actor.role === 'admin')) return res.status(403).json({ error: 'Admin access required' });
+  const target = [...usersByEmail.values()].find((u) => Buffer.from(u.id).toString('base64url') === req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (Buffer.from(actor.id).toString('base64url') === req.params.id) return res.status(400).json({ error: 'You cannot delete your own account' });
+  if (target.role === 'root') return res.status(400).json({ error: 'The root account cannot be deleted' });
+
+  usersByEmail.delete(target.email);
+  for (const [token, e] of sessions) if (e.userId === req.params.id) sessions.delete(token);
+  for (const [id, w] of widgets) if (w.userId === req.params.id) widgets.delete(id);
+  for (const g of accessGroups.values()) {
+    const i = g.members.indexOf(req.params.id);
+    if (i !== -1) g.members.splice(i, 1);
+  }
   void persistState();
   return res.json({ ok: true });
 });
