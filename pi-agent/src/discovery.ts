@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import net from 'node:net';
+import dns from 'node:dns/promises';
 import mdns from 'multicast-dns';
 
 export type DiscoveredDevice = {
@@ -50,6 +51,27 @@ const OUI: Record<string, string> = {
 function ouiVendor(mac?: string): string | undefined {
   if (!mac) return undefined;
   return OUI[mac.replace(/:/g, '').slice(0, 6).toLowerCase()];
+}
+
+// Reverse-DNS (PTR) lookup — the local resolver (router / Pi-hole) usually knows the
+// DHCP hostnames, so this gives a friendly name for plain hosts that have no mDNS or
+// fingerprint. Cached because the mapping rarely changes within a session.
+const ptrCache = new Map<string, string | null>();
+async function reverseDns(ip: string): Promise<string | undefined> {
+  if (ptrCache.has(ip)) return ptrCache.get(ip) ?? undefined;
+  try {
+    const names = await Promise.race([
+      dns.reverse(ip),
+      new Promise<string[]>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1200)),
+    ]);
+    // Strip a trailing local domain (".lan", ".fritz.box", ".local") for a cleaner label.
+    const name = names[0]?.replace(/\.(lan|local|home|fritz\.box|localdomain)\.?$/i, '') || undefined;
+    ptrCache.set(ip, name ?? null);
+    return name;
+  } catch {
+    ptrCache.set(ip, null);
+    return undefined;
+  }
 }
 
 // Read a web device's <title> / Server header for a human-friendly name (HTTP only).
@@ -223,7 +245,7 @@ export async function runDiscovery(subnet?: string): Promise<DiscoveredDevice[]>
         return {
           ip, mac,
           vendor: ouiVendor(mac),
-          hostname: fingerprint.hostname ?? mdnsHint?.hostname,
+          hostname: fingerprint.hostname ?? mdnsHint?.hostname ?? await reverseDns(ip),
           type: fingerprint.type,
           info: fingerprint.info,
           discoveredAt: Date.now(),
@@ -298,7 +320,7 @@ export async function monitorSweep(subnet?: string): Promise<void> {
     const known = hostRegistry.has(key) || [...hostRegistry.values()].some((h) => h.ip === ip);
     if (!known) {
       hostRegistry.set(key, {
-        ip, mac, vendor: ouiVendor(mac), type: 'unknown', via: 'arp',
+        ip, mac, vendor: ouiVendor(mac), hostname: await reverseDns(ip), type: 'unknown', via: 'arp',
         discoveredAt: now, firstSeen: now, lastSeen: now, online: true,
       });
     }
