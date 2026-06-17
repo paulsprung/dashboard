@@ -170,7 +170,7 @@ const startMetricsSampler = () => {
 };
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: '0.1.0', uptime: process.uptime(), metrics: getMetrics() });
+  res.json({ ok: true, version: '0.2.0', uptime: process.uptime(), metrics: getMetrics() });
 });
 
 app.get('/metrics/history', (_req, res) => {
