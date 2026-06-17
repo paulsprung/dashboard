@@ -287,6 +287,16 @@ function IcPerson({ size = 17 }: { size?: number }) {
   );
 }
 
+function IcChip({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="5.5" y="5.5" width="9" height="9" rx="1.5"/>
+      <rect x="8.5" y="8.5" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+      <path d="M8 5.5V3M12 5.5V3M8 17v-2.5M12 17v-2.5M5.5 8H3M5.5 12H3M17 8h-2.5M17 12h-2.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 function IcGear({ size = 17 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor">
@@ -2017,14 +2027,15 @@ function InvitePage({ setup, inviteToken, initEmail }: {
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
-type Tab = 'home' | 'devices' | 'discovery' | 'admin' | 'settings';
+type Tab = 'home' | 'devices' | 'discovery' | 'pi' | 'admin' | 'settings';
 
-const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery'];
+const ADMIN_ONLY_TABS: Tab[] = ['admin', 'discovery', 'pi'];
 
 const NAV: { key: Tab; label: string; icon: React.ReactNode; color: string }[] = [
   { key: 'home',      label: 'Home',      icon: <IcHome size={15} />,   color: '#007AFF' },
   { key: 'devices',   label: 'Devices',  icon: <IcGrid size={15} />,   color: '#5856D6' },
   { key: 'discovery', label: 'Discovery', icon: <IcRadar size={15} />,  color: '#FF9500' },
+  { key: 'pi',        label: 'Pi',        icon: <IcChip size={15} />,   color: '#34C759' },
   { key: 'admin',     label: 'Admin',     icon: <IcPerson size={15} />, color: '#30D158' },
 ];
 
@@ -2436,6 +2447,11 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
   const mmss = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
   const doAction = async (device: Device, action: string) => {
+    // For actions that open a URL (web/rdp/ssh), open the tab synchronously *now* — while
+    // we still have the click's user-activation — and navigate it once the server answers.
+    // Opening after `await` is treated as an unsolicited popup and gets blocked.
+    const opensUrl = action === 'open' || action === 'connect';
+    const pending = opensUrl ? window.open('', '_blank') : null;
     setActionStatus((prev) => ({ ...prev, [device.id]: '…' }));
     try {
       const r = await fetch(`/api/devices/${device.id}/action`, {
@@ -2444,13 +2460,22 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
       });
       if (r.ok) {
         const data = await r.json() as any;
-        if (data.url) { window.open(data.url, '_blank'); }
+        if (data.url) {
+          if (pending) pending.location.href = data.url;
+          else window.open(data.url, '_blank');
+        } else if (pending) {
+          pending.close(); // no URL came back — don't leave a blank tab open
+        }
         setActionStatus((prev) => ({ ...prev, [device.id]: data.ok ? '✓' : data.error ?? '?' }));
       } else {
+        if (pending) pending.close();
         const e = await readErr(r, 'Error');
         setActionStatus((prev) => ({ ...prev, [device.id]: `✗ ${e}` }));
       }
-    } catch { setActionStatus((prev) => ({ ...prev, [device.id]: '✗ Netzwerkfehler' })); }
+    } catch {
+      if (pending) pending.close();
+      setActionStatus((prev) => ({ ...prev, [device.id]: '✗ Netzwerkfehler' }));
+    }
     setTimeout(() => setActionStatus((prev) => { const n = { ...prev }; delete n[device.id]; return n; }), 3000);
   };
 
@@ -3005,21 +3030,176 @@ type PiMetrics = {
 
 const fmtGB = (b?: number | null) => b != null ? `${(b / 1e9).toFixed(b < 1e10 ? 1 : 0)} GB` : '–';
 
+// Dedicated Pi appliance view: live health metrics + the Pi Agent's internal activity log.
+// Admin-only. Auto-refreshes so it reads like a real monitor.
+function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens }) {
+  const [pi, setPi] = useState<{ connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } | null>(null);
+  const [agentCount, setAgentCount] = useState(0);
+  const [configured, setConfigured] = useState(true);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      const [dRes, aRes] = await Promise.all([
+        fetch('/api/pi-agent/discovered', { credentials: 'include' }),
+        fetch('/api/admin/audit?limit=100', { credentials: 'include' }),
+      ]);
+      if (dRes.ok) {
+        const d = await dRes.json() as { agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } };
+        setPi(d.pi ?? null); setAgentCount((d.agents ?? []).length); setConfigured(d.configured);
+      }
+      if (aRes.ok) setAudit((await aRes.json() as { entries: AuditEntry[] }).entries ?? []);
+    } finally { setLoading(false); setRefreshing(false); }
+  };
+
+  useEffect(() => {
+    void load();
+    const i = setInterval(() => { void load(); }, 15_000); // live-ish metrics
+    return () => clearInterval(i);
+  }, []);
+
+  const m = pi?.metrics;
+  const metricCards = m ? [
+    { label: 'CPU',  value: `${m.cpuPct}%`, sub: `load ${m.load1} · ${m.cpus} cores`, pct: m.cpuPct },
+    { label: 'RAM',  value: `${m.memPct}%`, sub: `${fmtGB(m.memUsed)} / ${fmtGB(m.memTotal)}`, pct: m.memPct },
+    { label: 'Temp', value: m.tempC != null ? `${m.tempC}°C` : '–', sub: 'CPU package', pct: m.tempC != null ? Math.min(100, Math.round((m.tempC / 85) * 100)) : null },
+    { label: 'Disk', value: m.diskPct != null ? `${m.diskPct}%` : '–', sub: `${fmtGB(m.diskUsed)} / ${fmtGB(m.diskTotal)}`, pct: m.diskPct },
+  ] : [];
+
+  return (
+    <div className="animate-slide-right space-y-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className={`text-xl font-semibold ${t.text}`}>Raspberry Pi</h1>
+          <p className={`text-sm ${t.muted}`}>Health, resources and the Pi Agent's internal activity log.</p>
+        </div>
+        <Btn accent={accent} variant="secondary" size="sm" onClick={() => load(true)} loading={refreshing}>↻ Refresh</Btn>
+      </div>
+
+      {loading && !pi ? (
+        <div className="flex justify-center py-16"><Spinner size={24} color={accent} /></div>
+      ) : !configured ? (
+        <div className={`${s.glassSubtle} rounded-[22px] p-12 text-center`} style={{ boxShadow: s.cardShadow }}>
+          <p className="text-4xl mb-3">◎</p>
+          <p className={`font-medium ${t.text}`}>No Pi Agent configured</p>
+          <p className={`mt-1 text-sm ${t.muted}`}>Set <code>PI_AGENT_URL</code> in the dashboard config to connect your Pi.</p>
+        </div>
+      ) : (
+        <>
+          {/* Status + metrics */}
+          <section className={`${s.glassSubtle} rounded-[22px] p-5`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-[13px] text-[22px]" style={{ background: `${accent}1A` }}>🛡️</div>
+                <div>
+                  <p className={`text-sm font-semibold ${t.text}`}>Pi Agent</p>
+                  <p className={`text-xs ${t.muted}`}>
+                    {pi?.connected
+                      ? `v${pi.version ?? '?'} · agent up ${formatUptime(pi.uptime)} · ${agentCount} host agent${agentCount !== 1 ? 's' : ''}`
+                      : 'Configured, but currently unreachable'}
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  color: pi?.connected ? '#30D158' : '#FF453A',
+                  background: pi?.connected ? 'rgba(48,209,88,0.13)' : 'rgba(255,69,58,0.13)',
+                  border: `1px solid ${pi?.connected ? 'rgba(48,209,88,0.22)' : 'rgba(255,69,58,0.22)'}`,
+                }}>
+                <span className="h-[6px] w-[6px] rounded-full" style={{ backgroundColor: pi?.connected ? '#30D158' : '#FF453A', animation: pi?.connected ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
+                {pi?.connected ? 'Connected' : 'Offline'}
+              </span>
+            </div>
+
+            {pi?.connected && m ? (
+              <>
+                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {metricCards.map((c) => {
+                    const warn = c.pct != null && c.pct >= 85;
+                    const col = warn ? '#FF453A' : accent;
+                    return (
+                      <div key={c.label} className={`rounded-[14px] p-4 ${t.inputBg}`}>
+                        <div className="flex items-baseline justify-between">
+                          <span className={`text-[11px] font-medium uppercase tracking-wide ${t.muted}`}>{c.label}</span>
+                          <span className="text-[19px] font-semibold tabular-nums" style={{ color: col }}>{c.value}</span>
+                        </div>
+                        {c.pct != null && (
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full" style={{ background: `${col}22` }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${c.pct}%`, background: col }} />
+                          </div>
+                        )}
+                        <p className={`mt-1.5 text-[10px] ${t.muted} truncate`}>{c.sub}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <dl className={`mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-4 text-xs sm:grid-cols-3 ${t.border}`}>
+                  {[
+                    ['CPU cores', String(m.cpus)],
+                    ['Load (1m)', String(m.load1)],
+                    ['Memory', `${fmtGB(m.memUsed)} / ${fmtGB(m.memTotal)}`],
+                    ['Disk', m.diskTotal != null ? `${fmtGB(m.diskUsed)} / ${fmtGB(m.diskTotal)}` : '–'],
+                    ['CPU temp', m.tempC != null ? `${m.tempC} °C` : '–'],
+                    ['OS uptime', formatUptime(m.osUptime)],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-2">
+                      <dt className={t.muted}>{k}</dt>
+                      <dd className={`font-mono ${t.text}`}>{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            ) : (
+              <p className={`mt-4 text-sm ${t.muted}`}>Metrics unavailable — the Pi Agent is offline.</p>
+            )}
+          </section>
+
+          {/* Activity log */}
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <h2 className={`font-semibold ${t.text}`}>Activity log</h2>
+              <span className={`text-xs ${t.muted}`}>{audit.length} event{audit.length !== 1 ? 's' : ''}</span>
+            </div>
+            {audit.length === 0 ? (
+              <p className={`text-sm ${t.muted}`}>No activity recorded yet.</p>
+            ) : (
+              <div className="space-y-1 max-h-[28rem] overflow-y-auto">
+                {audit.map((e, i) => (
+                  <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs ${t.navHover}`}>
+                    <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${e.ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString()}</span>
+                    <span className="flex-shrink-0 rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${accent}15`, color: accent }}>{auditKindLabel(e.kind)}</span>
+                    <span className={`min-w-0 flex-1 truncate ${t.text}`}>
+                      {[e.action, e.deviceType, e.target].filter(Boolean).join(' · ')}
+                      {e.message ? ` — ${e.message}` : ''}
+                    </span>
+                    {e.actor && <span className={`flex-shrink-0 ${t.muted}`}>{e.actor.split('@')[0]}</span>}
+                    {typeof e.latencyMs === 'number' && <span className={`flex-shrink-0 font-mono ${t.muted}`}>{e.latencyMs}ms</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   devices: Device[]; setDevices: (d: Device[]) => void;
   t: ReturnType<typeof tok>; accent: string; s: ShellTokens;
 }) {
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [agents, setAgents] = useState<HostAgentInfo[]>([]);
-  const [pi, setPi] = useState<{ connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } | null>(null);
   const [configured, setConfigured] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [lastScan, setLastScan] = useState<number | null>(null);
-  const [piExpanded, setPiExpanded] = useState(false);
-  const [piLog, setPiLog] = useState<AuditEntry[]>([]);
-  const [piLogLoading, setPiLogLoading] = useState(false);
 
   useEffect(() => {
     void load();
@@ -3027,27 +3207,14 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     return () => clearInterval(i);
   }, []);
 
-  const togglePiDetails = async () => {
-    const next = !piExpanded;
-    setPiExpanded(next);
-    if (next && piLog.length === 0) {
-      setPiLogLoading(true);
-      try {
-        const r = await fetch('/api/admin/audit?limit=40', { credentials: 'include' });
-        if (r.ok) setPiLog((await r.json() as { entries: AuditEntry[] }).entries ?? []);
-      } finally { setPiLogLoading(false); }
-    }
-  };
-
   const load = async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/pi-agent/discovered', { credentials: 'include' });
       if (r.ok) {
-        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } };
+        const d = await r.json() as { devices: DiscoveredDevice[]; agents: HostAgentInfo[]; configured: boolean };
         setDiscovered(d.devices ?? []);
         setAgents(d.agents ?? []);
-        setPi(d.pi ?? null);
         setConfigured(d.configured);
       }
     } finally {
@@ -3120,116 +3287,6 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
         </div>
       ) : (
         <>
-          {/* Pi Agent status — click to expand detailed stats + activity log */}
-          <section className={`${s.glassSubtle} rounded-[22px] p-5`} style={{ boxShadow: s.cardShadow }}>
-            <button type="button" onClick={togglePiDetails} className="flex w-full items-center justify-between text-left">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] text-[20px]"
-                  style={{ background: `${accent}1A` }}>🛡️</div>
-                <div>
-                  <p className={`text-sm font-semibold ${t.text} flex items-center gap-1.5`}>
-                    Pi Agent
-                    <span className={`text-xs transition-transform ${piExpanded ? 'rotate-90' : ''} ${t.muted}`}>›</span>
-                  </p>
-                  <p className={`text-xs ${t.muted}`}>
-                    {pi?.connected
-                      ? `v${pi.version ?? '?'} · up ${formatUptime(pi.uptime)} · ${agents.length} host agent${agents.length !== 1 ? 's' : ''}`
-                      : 'Configured, but currently unreachable'}
-                  </p>
-                </div>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={{
-                  color: pi?.connected ? '#30D158' : '#FF453A',
-                  background: pi?.connected ? 'rgba(48,209,88,0.13)' : 'rgba(255,69,58,0.13)',
-                  border: `1px solid ${pi?.connected ? 'rgba(48,209,88,0.22)' : 'rgba(255,69,58,0.22)'}`,
-                }}>
-                <span className="h-[6px] w-[6px] rounded-full"
-                  style={{ backgroundColor: pi?.connected ? '#30D158' : '#FF453A',
-                    animation: pi?.connected ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
-                {pi?.connected ? 'Connected' : 'Offline'}
-              </span>
-            </button>
-
-            {pi?.connected && pi.metrics && (
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  { label: 'CPU',  value: `${pi.metrics.cpuPct}%`,  sub: `load ${pi.metrics.load1}`, pct: pi.metrics.cpuPct },
-                  { label: 'RAM',  value: `${pi.metrics.memPct}%`,  sub: `${fmtGB(pi.metrics.memUsed)} / ${fmtGB(pi.metrics.memTotal)}`, pct: pi.metrics.memPct },
-                  { label: 'Temp', value: pi.metrics.tempC != null ? `${pi.metrics.tempC}°C` : '–', sub: 'CPU', pct: pi.metrics.tempC != null ? Math.min(100, Math.round((pi.metrics.tempC / 85) * 100)) : null },
-                  { label: 'Disk', value: pi.metrics.diskPct != null ? `${pi.metrics.diskPct}%` : '–', sub: `${fmtGB(pi.metrics.diskUsed)} / ${fmtGB(pi.metrics.diskTotal)}`, pct: pi.metrics.diskPct },
-                ].map((m) => {
-                  const warn = m.pct != null && m.pct >= 85;
-                  const col = warn ? '#FF453A' : accent;
-                  return (
-                    <div key={m.label} className={`rounded-[14px] p-3 ${t.inputBg}`}>
-                      <div className="flex items-baseline justify-between">
-                        <span className={`text-[11px] font-medium uppercase tracking-wide ${t.muted}`}>{m.label}</span>
-                        <span className="text-[15px] font-semibold tabular-nums" style={{ color: col }}>{m.value}</span>
-                      </div>
-                      {m.pct != null && (
-                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full" style={{ background: `${col}22` }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${m.pct}%`, background: col }} />
-                        </div>
-                      )}
-                      <p className={`mt-1.5 text-[10px] ${t.muted} truncate`}>{m.sub}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Expanded drill-down: finer stats + the Pi's internal activity log */}
-            {piExpanded && (
-              <div className={`mt-4 space-y-4 border-t pt-4 ${t.border}`}>
-                {pi?.connected && pi.metrics ? (
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
-                    {[
-                      ['CPU cores', String(pi.metrics.cpus)],
-                      ['Load (1m)', String(pi.metrics.load1)],
-                      ['Memory', `${fmtGB(pi.metrics.memUsed)} / ${fmtGB(pi.metrics.memTotal)}`],
-                      ['Disk', pi.metrics.diskTotal != null ? `${fmtGB(pi.metrics.diskUsed)} / ${fmtGB(pi.metrics.diskTotal)}` : '–'],
-                      ['CPU temp', pi.metrics.tempC != null ? `${pi.metrics.tempC} °C` : '–'],
-                      ['OS uptime', formatUptime(pi.metrics.osUptime)],
-                    ].map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-2">
-                        <dt className={t.muted}>{k}</dt>
-                        <dd className={`font-mono ${t.text}`}>{v}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className={`text-sm ${t.muted}`}>Detailed metrics unavailable — Pi Agent offline.</p>
-                )}
-
-                <div>
-                  <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${t.muted}`}>Recent activity</p>
-                  {piLogLoading ? (
-                    <Spinner size={18} color={accent} />
-                  ) : piLog.length === 0 ? (
-                    <p className={`text-sm ${t.muted}`}>No activity recorded yet.</p>
-                  ) : (
-                    <div className="space-y-1 max-h-72 overflow-y-auto">
-                      {piLog.map((e, i) => (
-                        <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs ${t.navHover}`}>
-                          <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${e.ok ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString()}</span>
-                          <span className="flex-shrink-0 rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${accent}15`, color: accent }}>{auditKindLabel(e.kind)}</span>
-                          <span className={`min-w-0 flex-1 truncate ${t.text}`}>
-                            {[e.action, e.deviceType, e.target].filter(Boolean).join(' · ')}
-                            {e.message ? ` — ${e.message}` : ''}
-                          </span>
-                          {e.actor && <span className={`flex-shrink-0 ${t.muted}`}>{e.actor.split('@')[0]}</span>}
-                          {typeof e.latencyMs === 'number' && <span className={`flex-shrink-0 font-mono ${t.muted}`}>{e.latencyMs}ms</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-
           {/* Discovered devices (recognised types only — addable) */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <div className="flex items-center justify-between">
@@ -3705,6 +3762,10 @@ function Dashboard({ user, setup, onSignOut }: {
 
           {tab === 'discovery' && canAdmin && (
             <DiscoveryTab devices={devices} setDevices={setDevices} t={t} accent={accent} s={s} />
+          )}
+
+          {tab === 'pi' && canAdmin && (
+            <PiTab t={t} accent={accent} s={s} />
           )}
 
           {tab === 'admin' && canAdmin && (
