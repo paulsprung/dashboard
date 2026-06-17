@@ -997,7 +997,7 @@ app.post('/api/devices', async (req, res) => {
   if (hasPiAgent()) {
     // Zero-knowledge mode: push sensitive config to Pi Agent, store only metadata here
     try {
-      const r = await piAgentFetch('/devices/config', { method: 'POST', body: JSON.stringify({ id, ...config }) });
+      const r = await piAgentFetch('/devices/config', { method: 'POST', body: JSON.stringify({ id, name, ...config }) });
       if (!r.ok) return res.status(502).json({ error: `Pi Agent rejected config: ${r.status}` });
     } catch (err) {
       return res.status(502).json({ error: `Pi Agent unreachable: ${(err as Error).message}` });
@@ -1028,7 +1028,7 @@ app.patch('/api/devices/:id', async (req, res) => {
 
     if (hasPiAgent()) {
       try {
-        await piAgentFetch(`/devices/config/${req.params.id}`, { method: 'PUT', body: JSON.stringify({ id: req.params.id, ...config }) });
+        await piAgentFetch(`/devices/config/${req.params.id}`, { method: 'PUT', body: JSON.stringify({ id: req.params.id, name: device.name, ...config }) });
       } catch { /* non-fatal: Pi Agent may be temporarily unreachable */ }
     } else {
       device.config = config;
@@ -1241,6 +1241,30 @@ app.get('/api/pi-agent/metrics/history', async (req, res) => {
     if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
     const data = await r.json() as { samples?: unknown[]; sampleIntervalMs?: number };
     return res.json({ samples: data.samples ?? [], sampleIntervalMs: data.sampleIntervalMs ?? 30000, configured: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+});
+
+// Admin-only: notification channel status (no secrets) + a test trigger.
+app.get('/api/pi-agent/notify/status', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.json({ enabled: false, channels: [], configured: false });
+  try {
+    const r = await piAgentFetch('/notify/status');
+    if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
+    return res.json({ ...(await r.json() as object), configured: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+});
+
+app.post('/api/pi-agent/notify/test', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.status(400).json({ error: 'Pi Agent not configured' });
+  try {
+    const r = await piAgentFetch('/notify/test', { method: 'POST' });
+    return res.status(r.status).json(await r.json());
   } catch {
     return res.status(502).json({ error: 'Pi Agent unreachable' });
   }

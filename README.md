@@ -419,7 +419,31 @@ the dashboard runs the checks itself.
 
 ---
 
-## 9. Activity Log
+## 9. Notifications / Alerts
+
+The **Pi Agent** sends push alerts — it's the one that watches device reachability and
+its own health, and it keeps working even if the public dashboard is down. Configure any
+channel(s) in `pi-agent/.env` (secrets stay on the Pi) and restart the agent:
+
+| Channel | Env vars |
+|---------|----------|
+| **ntfy** | `NTFY_URL` (a topic URL, self-hosted or `https://ntfy.sh/<topic>`) |
+| **Webhook** | `ALERT_WEBHOOK_URL` (receives a JSON POST `{ title, message, priority, tags, ts }`) |
+| **Telegram** | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` |
+
+Alerts fire on:
+
+- **Device offline / back online** — a monitored device stops/starts responding.
+- **Pi health** — temperature, disk or memory crossing a threshold (`ALERT_TEMP_C`=75,
+  `ALERT_DISK_PCT`=90, `ALERT_MEM_PCT`=92 by default). Fires on the way up, sends a
+  "recovered" once it drops back down — no spamming.
+
+Manage and test it under the **Pi** tab → *Alerts* (shows the active channels and
+thresholds, with a **Send test** button). Every alert is also written to the activity log.
+
+---
+
+## 10. Activity Log
 
 The Pi records every internal operation to `data/audit.log` (JSON-lines, also streamed to
 `docker compose logs`):

@@ -60,7 +60,7 @@ type DiscoveredDevice = {
 
 type AuditEntry = {
   ts: number;
-  kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'auth_fail';
+  kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'alert' | 'auth_fail';
   ok: boolean;
   actor?: string;
   deviceId?: string;
@@ -3010,6 +3010,7 @@ const auditKindLabel = (k: AuditEntry['kind']): string => ({
   agent_register: 'Host',
   agent_ip_change: 'IP change',
   discovery: 'Scan',
+  alert: 'Alert',
   auth_fail: 'Auth ✗',
 }[k] ?? k);
 
@@ -3068,16 +3069,19 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
   const [configured, setConfigured] = useState(true);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [history, setHistory] = useState<MetricSample[]>([]);
+  const [notify, setNotify] = useState<{ enabled: boolean; channels: string[]; thresholds?: { tempC: number; diskPct: number; memPct: number } } | null>(null);
+  const [testMsg, setTestMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const [dRes, aRes, hRes] = await Promise.all([
+      const [dRes, aRes, hRes, nRes] = await Promise.all([
         fetch('/api/pi-agent/discovered', { credentials: 'include' }),
         fetch('/api/admin/audit?limit=100', { credentials: 'include' }),
         fetch('/api/pi-agent/metrics/history', { credentials: 'include' }),
+        fetch('/api/pi-agent/notify/status', { credentials: 'include' }),
       ]);
       if (dRes.ok) {
         const d = await dRes.json() as { agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } };
@@ -3085,7 +3089,18 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
       }
       if (aRes.ok) setAudit((await aRes.json() as { entries: AuditEntry[] }).entries ?? []);
       if (hRes.ok) setHistory((await hRes.json() as { samples: MetricSample[] }).samples ?? []);
+      if (nRes.ok) setNotify(await nRes.json() as { enabled: boolean; channels: string[]; thresholds?: { tempC: number; diskPct: number; memPct: number } });
     } finally { setLoading(false); setRefreshing(false); }
+  };
+
+  const sendTest = async () => {
+    setTestMsg('…');
+    try {
+      const r = await fetch('/api/pi-agent/notify/test', { method: 'POST', credentials: 'include' });
+      const d = await r.json() as { ok?: boolean; channels?: string[]; error?: string };
+      setTestMsg(r.ok ? `✓ Sent via ${(d.channels ?? []).join(', ') || 'channel'}` : `✗ ${d.error ?? 'Failed'}`);
+    } catch { setTestMsg('✗ Network error'); }
+    setTimeout(() => setTestMsg(''), 4000);
   };
 
   useEffect(() => {
@@ -3221,6 +3236,39 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
               <p className={`text-[11px] ${t.muted}`}>Sampled every ~30s on the Pi and kept across restarts — fills in over time.</p>
             </section>
           )}
+
+          {/* Alerts */}
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={`font-semibold ${t.text}`}>Alerts</h2>
+                <p className={`mt-0.5 text-sm ${t.muted}`}>Push notifications when a device goes offline or the Pi runs hot/full.</p>
+              </div>
+              {notify?.enabled && (
+                <Btn accent={accent} variant="secondary" size="sm" onClick={sendTest}>Send test</Btn>
+              )}
+            </div>
+            {testMsg && <StatusMsg msg={testMsg} t={t} />}
+            {notify?.enabled ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={t.muted}>Channels:</span>
+                  {notify.channels.map((c) => (
+                    <span key={c} className="rounded-full px-2 py-0.5 text-xs font-medium capitalize" style={{ background: `${accent}1A`, color: accent }}>{c}</span>
+                  ))}
+                </div>
+                {notify.thresholds && (
+                  <p className={`text-xs ${t.muted}`}>
+                    Thresholds — temp ≥ {notify.thresholds.tempC}°C · disk ≥ {notify.thresholds.diskPct}% · memory ≥ {notify.thresholds.memPct}%
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className={`text-sm ${t.muted}`}>
+                No channel configured. Set <code>NTFY_URL</code>, <code>ALERT_WEBHOOK_URL</code> or <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code> in the Pi Agent's <code>.env</code>, then restart it.
+              </p>
+            )}
+          </section>
 
           {/* Activity log */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>

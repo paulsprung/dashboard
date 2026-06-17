@@ -9,6 +9,8 @@ import { executeDeviceAction } from './proxy.js';
 import type { DeviceConfig } from './proxy.js';
 import { logEvent, getRecent, type AuditKind } from './audit.js';
 import { accessEnabled, grantAccess, revokeAccess, listGrants, startAccessSweeper } from './access.js';
+import { sendNotification, configuredChannels, notificationsEnabled } from './notify.js';
+import { evaluatePiHealth, evaluateDeviceState, forgetDevice, alertThresholds } from './alerts.js';
 
 // Best-effort human-readable target for the audit log (what the Pi will contact)
 const describeTarget = (cfg: DeviceConfig): string => {
@@ -36,7 +38,7 @@ if (!agentSecret) {
 // ── Device config store ───────────────────────────────────────────────────────
 // All sensitive device data (IPs, MACs, tokens) lives here on the Pi — never on Hetzner.
 
-type StoredConfig = DeviceConfig & { id: string };
+type StoredConfig = DeviceConfig & { id: string; name?: string };
 const deviceConfigs = new Map<string, StoredConfig>();
 
 const loadConfigs = () => {
@@ -149,6 +151,7 @@ const sampleMetrics = () => {
   const m = getMetrics();
   metricsHistory.push({ ts: Date.now(), cpuPct: m.cpuPct, memPct: m.memPct, tempC: m.tempC, diskPct: m.diskPct, load1: m.load1 });
   if (metricsHistory.length > HISTORY_MAX) metricsHistory = metricsHistory.slice(-HISTORY_MAX);
+  evaluatePiHealth({ tempC: m.tempC, diskPct: m.diskPct, memPct: m.memPct });
 };
 
 let historyDirty = false;
@@ -172,6 +175,18 @@ app.get('/health', (_req, res) => {
 
 app.get('/metrics/history', (_req, res) => {
   res.json({ samples: metricsHistory, sampleIntervalMs: HISTORY_SAMPLE_MS });
+});
+
+// ── Notifications ──────────────────────────────────────────────────────────────
+
+app.get('/notify/status', (_req, res) => {
+  res.json({ enabled: notificationsEnabled(), channels: configuredChannels(), thresholds: alertThresholds });
+});
+
+app.post('/notify/test', async (_req, res) => {
+  if (!notificationsEnabled()) return res.status(400).json({ error: 'No notification channel configured on the Pi Agent' });
+  const r = await sendNotification({ title: '🔔 Test notification', message: 'Your SM Dashboard alerts are working.', priority: 'default' });
+  return res.json({ ok: r.ok, channels: r.channels });
 });
 
 // ── Device config CRUD ────────────────────────────────────────────────────────
@@ -206,6 +221,7 @@ app.delete('/devices/config/:id', (req, res) => {
   const existed = deviceConfigs.get(req.params.id);
   deviceConfigs.delete(req.params.id);
   monitorStatuses.delete(req.params.id);
+  forgetDevice(req.params.id);
   saveConfigs();
   logEvent({ kind: 'config_delete', ok: true, deviceId: req.params.id, deviceType: existed?.type });
   return res.json({ ok: true });
@@ -245,7 +261,9 @@ const runMonitorChecks = async () => {
     const target = getCheckTarget(cfg);
     if (!target) return;
     const latency = await checkTcp(target.host, target.port);
-    monitorStatuses.set(cfg.id, { deviceId: cfg.id, online: latency !== null, latencyMs: latency, lastCheck: Date.now() });
+    const online = latency !== null;
+    monitorStatuses.set(cfg.id, { deviceId: cfg.id, online, latencyMs: latency, lastCheck: Date.now() });
+    evaluateDeviceState(cfg.id, cfg.name ?? cfg.type, online);
   });
   await Promise.allSettled(promises);
 };
