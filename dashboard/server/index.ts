@@ -1232,6 +1232,20 @@ app.get('/api/pi-agent/discovered', async (req, res) => {
   }
 });
 
+// Admin-only: the Pi Agent's rolling metric time-series, for the Pi tab's trend charts.
+app.get('/api/pi-agent/metrics/history', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.json({ samples: [], configured: false });
+  try {
+    const r = await piAgentFetch('/metrics/history');
+    if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
+    const data = await r.json() as { samples?: unknown[]; sampleIntervalMs?: number };
+    return res.json({ samples: data.samples ?? [], sampleIntervalMs: data.sampleIntervalMs ?? 30000, configured: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+});
+
 app.post('/api/pi-agent/discover', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   if (!process.env.PI_AGENT_URL || !process.env.PI_AGENT_SECRET) {

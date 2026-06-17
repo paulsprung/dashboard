@@ -3021,14 +3021,44 @@ type HostAgentInfo = {
 };
 
 type PiMetrics = {
-  cpus: number; cpuPct: number; load1: number;
+  cpus: number; cpuPct: number; load1: number; load5?: number; load15?: number;
   memTotal: number; memUsed: number; memPct: number;
   tempC: number | null;
   diskTotal: number | null; diskUsed: number | null; diskPct: number | null;
   osUptime: number;
+  hostname?: string; platform?: string; kernel?: string; arch?: string; cpuModel?: string | null;
 };
 
+type MetricSample = { ts: number; cpuPct: number; memPct: number; tempC: number | null; diskPct: number | null; load1: number };
+
 const fmtGB = (b?: number | null) => b != null ? `${(b / 1e9).toFixed(b < 1e10 ? 1 : 0)} GB` : '–';
+
+// Tiny dependency-free SVG line chart with gradient fill — used for the Pi trend graphs.
+function MiniChart({ data, color, unit, height = 64, max }: { data: number[]; color: string; unit?: string; height?: number; max?: number }) {
+  const w = 240, h = height, pad = 4;
+  const pts = data.filter((n) => Number.isFinite(n));
+  if (pts.length < 2) return <div style={{ height: h }} className="flex items-center justify-center text-[11px] opacity-50">collecting data…</div>;
+  const hi = max ?? Math.max(...pts, 1);
+  const lo = Math.min(...pts, 0);
+  const span = hi - lo || 1;
+  const x = (i: number) => pad + (i / (pts.length - 1)) * (w - pad * 2);
+  const y = (v: number) => pad + (1 - (v - lo) / span) * (h - pad * 2);
+  const line = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(pts.length - 1).toFixed(1)},${h - pad} L${x(0).toFixed(1)},${h - pad} Z`;
+  const gid = `g-${color.replace(/[^a-z0-9]/gi, '')}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" width="100%" height={h} aria-hidden>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
 
 // Dedicated Pi appliance view: live health metrics + the Pi Agent's internal activity log.
 // Admin-only. Auto-refreshes so it reads like a real monitor.
@@ -3037,21 +3067,24 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
   const [agentCount, setAgentCount] = useState(0);
   const [configured, setConfigured] = useState(true);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [history, setHistory] = useState<MetricSample[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const [dRes, aRes] = await Promise.all([
+      const [dRes, aRes, hRes] = await Promise.all([
         fetch('/api/pi-agent/discovered', { credentials: 'include' }),
         fetch('/api/admin/audit?limit=100', { credentials: 'include' }),
+        fetch('/api/pi-agent/metrics/history', { credentials: 'include' }),
       ]);
       if (dRes.ok) {
         const d = await dRes.json() as { agents: HostAgentInfo[]; configured: boolean; pi?: { connected: boolean; version?: string; uptime?: number; metrics?: PiMetrics | null } };
         setPi(d.pi ?? null); setAgentCount((d.agents ?? []).length); setConfigured(d.configured);
       }
       if (aRes.ok) setAudit((await aRes.json() as { entries: AuditEntry[] }).entries ?? []);
+      if (hRes.ok) setHistory((await hRes.json() as { samples: MetricSample[] }).samples ?? []);
     } finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -3137,17 +3170,20 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
                   })}
                 </div>
                 <dl className={`mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-4 text-xs sm:grid-cols-3 ${t.border}`}>
-                  {[
+                  {([
+                    ['Hostname', m.hostname ?? '–'],
+                    ['Model', m.cpuModel ?? '–'],
+                    ['Kernel', m.kernel ? `${m.platform ?? ''} ${m.kernel}`.trim() : '–'],
+                    ['Architecture', m.arch ?? '–'],
                     ['CPU cores', String(m.cpus)],
-                    ['Load (1m)', String(m.load1)],
+                    ['Load 1/5/15', `${m.load1} / ${m.load5 ?? '–'} / ${m.load15 ?? '–'}`],
                     ['Memory', `${fmtGB(m.memUsed)} / ${fmtGB(m.memTotal)}`],
                     ['Disk', m.diskTotal != null ? `${fmtGB(m.diskUsed)} / ${fmtGB(m.diskTotal)}` : '–'],
-                    ['CPU temp', m.tempC != null ? `${m.tempC} °C` : '–'],
                     ['OS uptime', formatUptime(m.osUptime)],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between gap-2">
-                      <dt className={t.muted}>{k}</dt>
-                      <dd className={`font-mono ${t.text}`}>{v}</dd>
+                  ] as [string, string][]).map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-2 min-w-0">
+                      <dt className={`flex-shrink-0 ${t.muted}`}>{k}</dt>
+                      <dd className={`font-mono truncate ${t.text}`} title={v}>{v}</dd>
                     </div>
                   ))}
                 </dl>
@@ -3156,6 +3192,35 @@ function PiTab({ t, accent, s }: { t: ReturnType<typeof tok>; accent: string; s:
               <p className={`mt-4 text-sm ${t.muted}`}>Metrics unavailable — the Pi Agent is offline.</p>
             )}
           </section>
+
+          {/* Trend charts */}
+          {pi?.connected && (
+            <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
+              <div className="flex items-center justify-between">
+                <h2 className={`font-semibold ${t.text}`}>Trends</h2>
+                <span className={`text-xs ${t.muted}`}>
+                  {history.length > 1 ? `last ${formatUptime(Math.round((history[history.length - 1].ts - history[0].ts) / 1000))}` : 'collecting…'}
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {([
+                  { label: 'CPU', color: '#0A84FF', unit: '%', max: 100, pick: (x: MetricSample) => x.cpuPct, cur: m?.cpuPct, fmt: (v?: number) => v != null ? `${v}%` : '–' },
+                  { label: 'Temperature', color: '#FF9F0A', unit: '°C', max: 90, pick: (x: MetricSample) => x.tempC ?? NaN, cur: m?.tempC ?? undefined, fmt: (v?: number) => v != null ? `${v}°C` : '–' },
+                  { label: 'RAM', color: '#30D158', unit: '%', max: 100, pick: (x: MetricSample) => x.memPct, cur: m?.memPct, fmt: (v?: number) => v != null ? `${v}%` : '–' },
+                  { label: 'Disk', color: '#BF5AF2', unit: '%', max: 100, pick: (x: MetricSample) => x.diskPct ?? NaN, cur: m?.diskPct ?? undefined, fmt: (v?: number) => v != null ? `${v}%` : '–' },
+                ]).map((c) => (
+                  <div key={c.label} className={`rounded-[16px] p-4 ${t.inputBg}`}>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <span className={`text-[12px] font-medium ${t.text}`}>{c.label}</span>
+                      <span className="text-[15px] font-semibold tabular-nums" style={{ color: c.color }}>{c.fmt(c.cur)}</span>
+                    </div>
+                    <MiniChart data={history.map(c.pick)} color={c.color} max={c.max} unit={c.unit} />
+                  </div>
+                ))}
+              </div>
+              <p className={`text-[11px] ${t.muted}`}>Sampled every ~30s on the Pi and kept across restarts — fills in over time.</p>
+            </section>
+          )}
 
           {/* Activity log */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>

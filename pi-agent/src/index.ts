@@ -108,6 +108,8 @@ function getMetrics() {
     cpus,
     cpuPct: Math.min(100, Math.round((load[0] / cpus) * 100)),
     load1: Math.round(load[0] * 100) / 100,
+    load5: Math.round(load[1] * 100) / 100,
+    load15: Math.round(load[2] * 100) / 100,
     memTotal: totalmem,
     memUsed: totalmem - freemem,
     memPct: Math.round(((totalmem - freemem) / totalmem) * 100),
@@ -116,11 +118,60 @@ function getMetrics() {
     diskUsed: disk ? disk.total - disk.free : null,
     diskPct: disk ? Math.round(((disk.total - disk.free) / disk.total) * 100) : null,
     osUptime: Math.round(os.uptime()),
+    // Static-ish host info (cheap to read every time, handy for the dashboard).
+    hostname: os.hostname(),
+    platform: os.platform(),
+    kernel: os.release(),
+    arch: os.arch(),
+    cpuModel: (os.cpus()[0]?.model ?? '').trim() || null,
   };
 }
 
+// ── Metrics history ─────────────────────────────────────────────────────────────
+// A rolling time-series so the dashboard can draw trend charts (temp, CPU, RAM…).
+// Sampled on a fixed interval regardless of who's watching, and persisted to disk so
+// a restart doesn't wipe the recent trend.
+
+type MetricSample = { ts: number; cpuPct: number; memPct: number; tempC: number | null; diskPct: number | null; load1: number };
+const HISTORY_MAX = 720;            // e.g. 720 × 30s ≈ 6 hours
+const HISTORY_SAMPLE_MS = 30_000;
+const historyFile = path.join(dataDir, 'metrics-history.json');
+let metricsHistory: MetricSample[] = [];
+
+const loadHistory = () => {
+  try {
+    const raw = JSON.parse(readFileSync(historyFile, 'utf8')) as MetricSample[];
+    if (Array.isArray(raw)) metricsHistory = raw.slice(-HISTORY_MAX);
+  } catch { /* no history yet */ }
+};
+
+const sampleMetrics = () => {
+  const m = getMetrics();
+  metricsHistory.push({ ts: Date.now(), cpuPct: m.cpuPct, memPct: m.memPct, tempC: m.tempC, diskPct: m.diskPct, load1: m.load1 });
+  if (metricsHistory.length > HISTORY_MAX) metricsHistory = metricsHistory.slice(-HISTORY_MAX);
+};
+
+let historyDirty = false;
+const saveHistory = () => {
+  if (!historyDirty) return;
+  historyDirty = false;
+  try { mkdirSync(dataDir, { recursive: true }); writeFileSync(historyFile, JSON.stringify(metricsHistory), 'utf8'); }
+  catch (err) { console.error('Failed to save metrics history:', err); }
+};
+
+const startMetricsSampler = () => {
+  loadHistory();
+  sampleMetrics();
+  setInterval(() => { sampleMetrics(); historyDirty = true; }, HISTORY_SAMPLE_MS);
+  setInterval(saveHistory, 5 * 60_000); // flush to disk every 5 min
+};
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: '0.1.0', uptime: process.uptime(), metrics: getMetrics() });
+});
+
+app.get('/metrics/history', (_req, res) => {
+  res.json({ samples: metricsHistory, sampleIntervalMs: HISTORY_SAMPLE_MS });
 });
 
 // ── Device config CRUD ────────────────────────────────────────────────────────
@@ -370,6 +421,7 @@ app.post('/access/revoke', async (req, res) => {
 app.listen(port, bindHost, () => {
   console.log(`SM Pi Agent listening on ${bindHost}:${port}`);
   startAccessSweeper();
+  startMetricsSampler();
   startMdnsListener();
   setTimeout(() => {
     void runDiscovery(process.env.LOCAL_SUBNET).then((r) =>
