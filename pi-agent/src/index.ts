@@ -277,8 +277,24 @@ app.post('/discover', async (_req, res) => {
   });
 });
 
+// Match a discovered host to an already-configured device by MAC (stable) or IP.
+// The Pi is the only place that knows both sides — the dashboard is zero-knowledge
+// and never stores IPs/MACs, so this correlation can't live there. Returning the
+// matched device id lets the dashboard hide already-added devices reliably, even
+// after the user renamed them (the old name-based match broke on rename).
+function findConfiguredId(d: { ip?: string; mac?: string }): string | undefined {
+  for (const [id, cfg] of deviceConfigs) {
+    const cfgMac = (cfg as { mac?: string }).mac;
+    const cfgIp = (cfg as { ip?: string }).ip;
+    if (cfgMac && d.mac && cfgMac.toLowerCase() === d.mac.toLowerCase()) return id;
+    if (cfgIp && d.ip && cfgIp === d.ip) return id;
+  }
+  return undefined;
+}
+
 app.get('/discover/results', (_req, res) => {
-  res.json(getLastResults());
+  const results = getLastResults().map((d) => ({ ...d, configuredDeviceId: findConfiguredId(d) }));
+  res.json(results);
 });
 
 // ── Host agents ───────────────────────────────────────────────────────────────

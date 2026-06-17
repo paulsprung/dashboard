@@ -149,6 +149,7 @@ type DeviceRecord = {
   tags?: string[];            // free-form user labels for grouping/filtering
   config?: DeviceConfig;      // only in legacy mode (PI_AGENT_URL not set)
   requiredPermissions: PermissionFlag[];
+  needsConfig?: boolean;      // discovered as 'unknown' — user still has to fill in the connection details
 };
 
 // ── Widget types ──────────────────────────────────────────────────────────────
@@ -882,7 +883,7 @@ const hasPiAgent = () => Boolean(process.env.PI_AGENT_URL && process.env.PI_AGEN
 // In zero-knowledge mode the config is never stored on this server at all.
 const safeDevice = (d: DeviceRecord) => ({
   id: d.id, name: d.name, type: d.type, room: d.room, icon: d.icon, tags: d.tags ?? [],
-  requiredPermissions: d.requiredPermissions,
+  requiredPermissions: d.requiredPermissions, needsConfig: d.needsConfig ?? false,
 });
 
 // ── Device routes ─────────────────────────────────────────────────────────────
@@ -925,7 +926,7 @@ app.get('/api/devices/:id/config', async (req, res) => {
 
 app.post('/api/devices', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { name, room, icon, tags, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, requiredPermissions, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
   const id = crypto.randomBytes(12).toString('base64url');
   const cleanTags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : undefined;
@@ -938,11 +939,11 @@ app.post('/api/devices', async (req, res) => {
     } catch (err) {
       return res.status(502).json({ error: `Pi Agent unreachable: ${(err as Error).message}` });
     }
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, requiredPermissions: requiredPermissions ?? [] };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, requiredPermissions: requiredPermissions ?? [], needsConfig: needsConfig || undefined };
     devices.set(id, device);
   } else {
     // Legacy mode: store full config on dashboard
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, config, requiredPermissions: requiredPermissions ?? [] };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, config, requiredPermissions: requiredPermissions ?? [], needsConfig: needsConfig || undefined };
     devices.set(id, device);
   }
 
@@ -954,14 +955,17 @@ app.patch('/api/devices/:id', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   const device = devices.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  const { name, room, icon, tags, config, requiredPermissions } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, requiredPermissions, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (name !== undefined) device.name = name;
   if (room !== undefined) device.room = room;
   if (icon !== undefined) device.icon = icon;
   if (tags !== undefined) device.tags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : [];
   if (requiredPermissions !== undefined) device.requiredPermissions = requiredPermissions;
+  if (needsConfig !== undefined) device.needsConfig = needsConfig || undefined;
   if (config !== undefined) {
     device.type = config.type;
+    device.needsConfig = undefined; // user just filled in the connection details
+
     if (hasPiAgent()) {
       try {
         await piAgentFetch(`/devices/config/${req.params.id}`, { method: 'PUT', body: JSON.stringify({ id: req.params.id, ...config }) });

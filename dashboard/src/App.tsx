@@ -55,6 +55,7 @@ type Device = {
   tags?: string[]; // free-form user labels for grouping/filtering
   config?: DeviceConfig; // absent in zero-knowledge mode (Pi Agent configured)
   requiredPermissions: PermissionFlag[];
+  needsConfig?: boolean; // discovered as 'unknown' — user still has to fill in connection details
 };
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
@@ -67,6 +68,7 @@ type DiscoveredDevice = {
   type: 'shelly_plug' | 'shelly_light' | 'tasmota' | 'proxmox' | 'docker' | 'web' | 'http' | 'unknown';
   via: 'arp' | 'mdns';
   discoveredAt: number;
+  configuredDeviceId?: string; // set by the Pi when this host already matches a configured device
 };
 
 type AuditEntry = {
@@ -2051,9 +2053,11 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
     const d = await r.json() as { devices: DiscoveredDevice[]; configured: boolean };
     setDiscoverConfigured(d.configured); setDiscovered(d.devices ?? []);
   };
+  // Already-configured hosts are matched on the Pi (by MAC/IP) and hidden here.
+  const newDiscovered = discovered.filter((dd) => !dd.configuredDeviceId);
   const addDiscovered = (dd: DiscoveredDevice) => {
-    const type = dd.type === 'unknown' ? 'http' : dd.type;
-    setPrefill({ name: dd.hostname || `${type} ${dd.ip}`, type, config: { type, ip: dd.ip } as DeviceConfig });
+    const type = (dd.type === 'unknown' || dd.type === 'http') ? 'web' : dd.type;
+    setPrefill({ name: dd.hostname || dd.vendor || `${type} ${dd.ip}`, type, config: { type, ip: dd.ip } as DeviceConfig });
     setShowDeviceForm(true); setEditDevice(null);
   };
 
@@ -2071,10 +2075,10 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
 
       {devStatus && <StatusMsg msg={devStatus} t={t} />}
 
-      {discovered.length > 0 && !showDeviceForm && !editDevice && (
+      {newDiscovered.length > 0 && !showDeviceForm && !editDevice && (
         <div className={`rounded-xl border p-3 space-y-2 ${t.border}`} style={{ borderColor: `${accent}25`, backgroundColor: `${accent}06` }}>
-          <p className={`text-xs font-medium ${t.muted}`}>{discovered.length} device(s) found on the network</p>
-          {discovered.map((dd, i) => (
+          <p className={`text-xs font-medium ${t.muted}`}>{newDiscovered.length} new device(s) found on the network</p>
+          {newDiscovered.map((dd, i) => (
             <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${t.inputBg}`}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="text-lg flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'web' : dd.type)}</span>
@@ -2109,7 +2113,12 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
             <div className="flex items-center gap-3">
               <span className="text-xl">{d.icon ?? deviceTypeIcon(d.type)}</span>
               <div>
-                <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
+                <p className={`text-sm font-medium ${t.text} flex items-center gap-2`}>
+                  {d.name}
+                  {d.needsConfig && (
+                    <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500">setup needed</span>
+                  )}
+                </p>
                 <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
                 {d.tags && d.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
@@ -2803,30 +2812,33 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
     }
   };
 
-  // A discovered device counts as "known" if we already have a device of the same
-  // type whose stored hostname/name matches — best effort, since IPs live on the Pi.
-  const isKnown = (dd: DiscoveredDevice) =>
-    devices.some((d) => d.type === dd.type && (d.name === dd.hostname || d.name.includes(dd.ip)));
+  // Already-configured hosts are matched on the Pi by MAC/IP (robust against renames)
+  // and hidden here — only genuinely new devices remain in the list.
+  const newDevices = discovered.filter((dd) => !dd.configuredDeviceId);
 
   const addDiscovered = async (dd: DiscoveredDevice) => {
-    // Unknown / generic hosts default to a "web" device (open its UI), not an on/off switch.
-    const type = (dd.type === 'unknown' || dd.type === 'http') ? 'web' : dd.type;
+    // Devices we couldn't fingerprint are added as a "web" host but flagged so the user
+    // fills in the real type / connection details afterwards. Recognised types are added
+    // fully configured with the right type, icon and hostname.
+    const unknown = dd.type === 'unknown' || dd.type === 'http';
+    const type = unknown ? 'web' : dd.type;
     const suggested = deviceTypePermission(type);
-    const config: DeviceConfig = type === 'web'
-      ? { type: 'web', ip: dd.ip }
-      : { type, ip: dd.ip } as DeviceConfig;
+    const config: DeviceConfig = { type, ip: dd.ip } as DeviceConfig;
     const r = await fetch('/api/devices', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({
         name: dd.hostname || dd.vendor || `${type} ${dd.ip}`,
         type, config,
         requiredPermissions: suggested ? [suggested] : [],
+        needsConfig: unknown || undefined,
       }),
     });
     if (r.ok) {
       const { device } = await r.json() as { device: Device };
       setDevices([...devices, device]);
-      setStatus(`✓ ${device.name} added${(type === 'proxmox' || type === 'docker') ? ' — add credentials in Settings' : ''}`);
+      const hint = device.needsConfig ? ' — finish setup in Devices'
+        : (type === 'proxmox' || type === 'docker') ? ' — add credentials in Settings' : '';
+      setStatus(`✓ ${device.name} added${hint}`);
     } else {
       setStatus(`✗ ${await readErr(r, 'Could not add device')}`);
     }
@@ -2915,35 +2927,37 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
             <div className="flex items-center justify-between">
               <h2 className={`font-semibold ${t.text}`}>Discovered devices</h2>
               <span className={`text-xs ${t.muted}`}>
-                {lastScan ? `Last scan: ${new Date(lastScan).toLocaleTimeString()}` : `${discovered.length} known`}
+                {lastScan ? `Last scan: ${new Date(lastScan).toLocaleTimeString()}` : `${newDevices.length} new`}
               </span>
             </div>
             {loading ? (
               <Spinner size={20} color={accent} />
-            ) : discovered.length === 0 ? (
-              <p className={`text-sm ${t.muted}`}>Nothing found yet. Start a scan — the Pi searches the ARP table and mDNS.</p>
+            ) : newDevices.length === 0 ? (
+              <p className={`text-sm ${t.muted}`}>
+                {discovered.length > 0
+                  ? 'All discovered devices are already configured.'
+                  : 'Nothing found yet. Start a scan — the Pi searches the ARP table and mDNS.'}
+              </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
-                {discovered.map((dd, i) => {
-                  const known = isKnown(dd);
+                {newDevices.map((dd, i) => {
+                  const unknown = dd.type === 'unknown' || dd.type === 'http';
                   return (
                     <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}
                       style={{ borderColor: `${accent}18` }}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' ? 'web' : dd.type)}</span>
+                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(unknown ? 'web' : dd.type)}</span>
                         <div className="min-w-0">
                           <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</p>
                           <p className={`text-xs ${t.muted}`}>
                             {dd.ip}
                             {dd.vendor ? <span className="ml-1 rounded px-1 py-0.5" style={{ background: `${accent}1A`, color: accent }}>{dd.vendor}</span> : null}
-                            {' · '}{dd.type === 'unknown' ? 'web' : dd.type}
+                            {' · '}{unknown ? 'unknown' : dd.type}
                             <span className="ml-1 opacity-60">({dd.via})</span>
                           </p>
                         </div>
                       </div>
-                      {known
-                        ? <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500`}>configured</span>
-                        : <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>}
+                      <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
                     </div>
                   );
                 })}
