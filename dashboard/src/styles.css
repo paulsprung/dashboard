@@ -234,21 +234,29 @@
 .login-ring         { animation: loginRing 1.6s ease-out infinite; }
 
 /* ── Padlock sign-in ─────────────────────────────────────────── */
+/* transform-box:view-box keeps the pivot in viewBox user units (0..40) so it works
+   the same across browsers (fill-box is flaky in Safari). The shackle hinges at the
+   base of its right leg (~28,20) and swings open. */
 .lock-shackle {
-  transform-box: fill-box;
-  transform-origin: right bottom;
-  transition: transform 0.55s cubic-bezier(0.5, -0.4, 0.3, 1.45);
+  transform-box: view-box;
+  transform-origin: 28px 20px;
+  transition: transform 0.5s cubic-bezier(0.45, -0.4, 0.3, 1.4);
 }
-.lock-shackle.is-open { transform: rotate(-38deg) translateY(-0.5px); }
+.lock-shackle.is-open { transform: rotate(-42deg); }
+.lock-shackle.is-working {
+  transform-origin: 20px 21px;
+  animation: lockWiggle 0.8s ease-in-out infinite;
+}
 @keyframes lockWiggle {
   0%, 100% { transform: rotate(0deg); }
-  30%      { transform: rotate(-3.5deg); }
-  70%      { transform: rotate(3.5deg); }
+  28%      { transform: rotate(-5deg); }
+  72%      { transform: rotate(5deg); }
 }
-.lock-shackle.is-working {
-  animation: lockWiggle 0.85s ease-in-out infinite;
-  transform-origin: center bottom;
+@keyframes lockBreathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
 }
+.lock-breathe { animation: lockBreathe 2.6s ease-in-out infinite; }
 
 
 /* ── Smooth transitions ──────────────────────────────────────── */

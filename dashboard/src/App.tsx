@@ -306,17 +306,21 @@ function IcGear({ size = 17 }: { size?: number }) {
   );
 }
 
-// Animated padlock for the sign-in button. The shackle swings open on success,
-// wiggles while authenticating, and stays shut (red) on denial. The white body's
-// keyhole is a translucent cut-out so it reads on any background colour.
-function LockIcon({ open = false, working = false, size = 50 }: { open?: boolean; working?: boolean; size?: number }) {
+// Standalone animated padlock for the sign-in button — no circle, tinted by phase.
+// The shackle swings open on success, wiggles while authenticating, and stays shut
+// (red) on denial. The keyhole is a translucent cut-out that darkens whatever colour
+// the lock currently is.
+function LockIcon({ phase, accent, size = 96 }: { phase: 'idle' | 'loading' | 'success' | 'error'; accent: string; size?: number }) {
+  const color = phase === 'success' ? '#30D158' : phase === 'error' ? '#FF453A' : accent;
+  const shackle = phase === 'success' ? 'is-open' : phase === 'loading' ? 'is-working' : '';
   return (
-    <svg width={size} height={size} viewBox="0 0 40 42" fill="none" aria-hidden>
-      <path className={`lock-shackle ${open ? 'is-open' : working ? 'is-working' : ''}`}
-        d="M12 20 v-6 a8 8 0 0 1 16 0 v6" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" />
-      <rect x="8" y="19.5" width="24" height="17.5" rx="4.5" fill="#fff" />
-      <circle cx="20" cy="26.5" r="2.7" fill="rgba(0,0,0,0.30)" />
-      <path d="M18.7 27.6 h2.6 l-0.7 5 h-1.2 z" fill="rgba(0,0,0,0.30)" />
+    <svg width={size} height={size} viewBox="0 0 40 42" fill="none" aria-hidden
+      style={{ color, transition: 'color 0.4s ease' }}>
+      <path className={`lock-shackle ${shackle}`} d="M12 21 v-7 a8 8 0 0 1 16 0 v7"
+        stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" />
+      <rect x="7" y="20" width="26" height="18.5" rx="5" fill="currentColor" />
+      <circle cx="20" cy="27.5" r="2.9" fill="rgba(0,0,0,0.32)" />
+      <path d="M18.5 28.6 h3 l-0.8 5.2 h-1.4 z" fill="rgba(0,0,0,0.32)" />
     </svg>
   );
 }
@@ -1990,23 +1994,20 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
     }
   };
 
-  const bg = phase === 'success' ? 'linear-gradient(150deg,#34D058,#28A745)'
-    : phase === 'error' ? 'linear-gradient(150deg,#FF6961,#D70015)'
-    : `linear-gradient(150deg, ${accent}FF, ${accent}CC)`;
+  const glow = phase === 'success' ? 'rgba(48,209,88,0.5)' : phase === 'error' ? 'rgba(255,69,58,0.5)' : `${accent}66`;
   const label = phase === 'loading' ? 'Authenticating…' : phase === 'success' ? 'Welcome back'
     : phase === 'error' ? (status.replace(/^✗ /, '') || 'Try again') : 'Tap to sign in';
 
   return (
     <AuthPage title={setup.dashboardName} sub="Sign in with your passkey" accent={accent} t={t}>
       <div className="flex flex-col items-center space-y-5">
-        {/* Big round passkey button with state animations */}
+        {/* Standalone padlock — no circle; colour + shackle reflect the auth state */}
         <button
           onClick={() => signIn(false)} disabled={busy} aria-label="Sign in with passkey"
-          className={`relative flex h-28 w-28 items-center justify-center rounded-full text-white transition-[background,transform] duration-300 active:scale-95 disabled:active:scale-100
-            ${phase === 'error' ? 'animate-shake' : ''} ${phase === 'success' ? 'animate-login-pop' : ''}`}
-          style={{ background: bg, boxShadow: `0 10px 36px ${phase === 'success' ? 'rgba(40,167,69,0.5)' : phase === 'error' ? 'rgba(215,0,21,0.45)' : `${accent}66`}, inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -2px 0 rgba(0,0,0,0.18)` }}>
-          {phase === 'idle' && <span className="login-ring pointer-events-none absolute inset-0 rounded-full" style={{ boxShadow: `0 0 0 3px ${accent}` }} />}
-          <LockIcon size={54} open={phase === 'success'} working={phase === 'loading'} />
+          className={`relative flex items-center justify-center transition-transform duration-300 active:scale-95 disabled:active:scale-100
+            ${phase === 'idle' ? 'lock-breathe' : ''} ${phase === 'error' ? 'animate-shake' : ''} ${phase === 'success' ? 'animate-login-pop' : ''}`}
+          style={{ filter: `drop-shadow(0 8px 22px ${glow})` }}>
+          <LockIcon phase={phase} accent={accent} size={104} />
         </button>
 
         <p className="text-center text-[14px] font-medium" style={{ color: phase === 'error' ? '#FF6961' : 'rgba(255,255,255,0.7)' }}>{label}</p>
