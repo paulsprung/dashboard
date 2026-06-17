@@ -306,13 +306,17 @@ function IcGear({ size = 17 }: { size?: number }) {
   );
 }
 
-function FaceIDIcon({ size = 22 }: { size?: number }) {
+// Animated padlock for the sign-in button. The shackle swings open on success,
+// wiggles while authenticating, and stays shut (red) on denial. The white body's
+// keyhole is a translucent cut-out so it reads on any background colour.
+function LockIcon({ open = false, working = false, size = 50 }: { open?: boolean; working?: boolean; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
-      <path d="M7 3H4a1 1 0 0 0-1 1v3M17 3h3a1 1 0 0 1 1 1v3M7 21H4a1 1 0 0 1-1-1v-3M17 21h3a1 1 0 0 0 1-1v-3"/>
-      <path d="M9 9v1M15 9v1"/>
-      <path d="M9.5 15.5a3.5 3.5 0 0 0 5 0"/>
-      <path d="M12 9v3.5"/>
+    <svg width={size} height={size} viewBox="0 0 40 42" fill="none" aria-hidden>
+      <path className={`lock-shackle ${open ? 'is-open' : working ? 'is-working' : ''}`}
+        d="M12 20 v-6 a8 8 0 0 1 16 0 v6" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" />
+      <rect x="8" y="19.5" width="24" height="17.5" rx="4.5" fill="#fff" />
+      <circle cx="20" cy="26.5" r="2.7" fill="rgba(0,0,0,0.30)" />
+      <path d="M18.7 27.6 h2.6 l-0.7 5 h-1.2 z" fill="rgba(0,0,0,0.30)" />
     </svg>
   );
 }
@@ -2002,12 +2006,7 @@ function LoginPage({ onLogin, setup }: { onLogin: (u: SessionUser) => void; setu
             ${phase === 'error' ? 'animate-shake' : ''} ${phase === 'success' ? 'animate-login-pop' : ''}`}
           style={{ background: bg, boxShadow: `0 10px 36px ${phase === 'success' ? 'rgba(40,167,69,0.5)' : phase === 'error' ? 'rgba(215,0,21,0.45)' : `${accent}66`}, inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -2px 0 rgba(0,0,0,0.18)` }}>
           {phase === 'idle' && <span className="login-ring pointer-events-none absolute inset-0 rounded-full" style={{ boxShadow: `0 0 0 3px ${accent}` }} />}
-          {phase === 'loading' ? <Spinner size={34} color="#fff" />
-            : phase === 'success' ? (
-              <svg width="52" height="52" viewBox="0 0 24 24" fill="none"><path className="draw-check" d="M5 12.5l4.2 4.2L19 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            ) : phase === 'error' ? (
-              <svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M7 7l10 10M17 7L7 17" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" /></svg>
-            ) : <FaceIDIcon size={46} />}
+          <LockIcon size={54} open={phase === 'success'} working={phase === 'loading'} />
         </button>
 
         <p className="text-center text-[14px] font-medium" style={{ color: phase === 'error' ? '#FF6961' : 'rgba(255,255,255,0.7)' }}>{label}</p>

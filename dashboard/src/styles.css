@@ -233,6 +233,23 @@
 .animate-login-pop  { animation: loginPop 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
 .login-ring         { animation: loginRing 1.6s ease-out infinite; }
 
+/* ── Padlock sign-in ─────────────────────────────────────────── */
+.lock-shackle {
+  transform-box: fill-box;
+  transform-origin: right bottom;
+  transition: transform 0.55s cubic-bezier(0.5, -0.4, 0.3, 1.45);
+}
+.lock-shackle.is-open { transform: rotate(-38deg) translateY(-0.5px); }
+@keyframes lockWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  30%      { transform: rotate(-3.5deg); }
+  70%      { transform: rotate(3.5deg); }
+}
+.lock-shackle.is-working {
+  animation: lockWiggle 0.85s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
 
 /* ── Smooth transitions ──────────────────────────────────────── */
 * { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
