@@ -61,7 +61,7 @@ type DiscoveredDevice = {
 
 type AuditEntry = {
   ts: number;
-  kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'alert' | 'auth_fail';
+  kind: 'action' | 'config_create' | 'config_update' | 'config_delete' | 'agent_register' | 'agent_ip_change' | 'discovery' | 'alert' | 'automation' | 'auth_fail';
   ok: boolean;
   actor?: string;
   deviceId?: string;
@@ -3024,8 +3024,173 @@ function AccessGroupForm({ initial, users, devices, t, accent, onSave, onCancel 
   );
 }
 
+// ── Automations / schedules ───────────────────────────────────────────────────
+type Automation = { id: string; name: string; enabled: boolean; deviceId: string; action: string; params?: Record<string, unknown>; time: string; days: number[]; lastRun?: number };
+
+// Weekday order Mon→Sun; stored values use JS getDay() (0=Sun).
+const WEEKDAYS = [{ n: 1, l: 'Mo' }, { n: 2, l: 'Tu' }, { n: 3, l: 'We' }, { n: 4, l: 'Th' }, { n: 5, l: 'Fr' }, { n: 6, l: 'Sa' }, { n: 0, l: 'Su' }];
+const ACTION_LABEL: Record<string, string> = { on: 'Turn on', off: 'Turn off', toggle: 'Toggle', wake: 'Wake (WOL)' };
+const actionsForType = (type?: string): string[] => {
+  if (type === 'wol') return ['wake'];
+  if (type === 'shelly_plug' || type === 'shelly_light' || type === 'tasmota' || type === 'hue') return ['on', 'off', 'toggle'];
+  if (type === 'http') return ['on', 'off'];
+  return [];
+};
+const daysSummary = (days: number[]) => {
+  if (!days.length) return 'every day';
+  if (days.length === 7) return 'every day';
+  const set = new Set(days);
+  if ([1, 2, 3, 4, 5].every((d) => set.has(d)) && set.size === 5) return 'weekdays';
+  if (set.has(0) && set.has(6) && set.size === 2) return 'weekends';
+  return WEEKDAYS.filter((d) => set.has(d.n)).map((d) => d.l).join(', ');
+};
+
+function AutomationForm({ initial, devices, t, accent, onSave, onCancel }: {
+  initial?: Automation; devices: Device[]; t: ReturnType<typeof tok>; accent: string;
+  onSave: (d: Partial<Automation>) => Promise<void>; onCancel: () => void;
+}) {
+  const controllable = devices.filter((d) => actionsForType(d.type).length);
+  const [name, setName] = useState(initial?.name ?? '');
+  const [deviceId, setDeviceId] = useState(initial?.deviceId ?? controllable[0]?.id ?? '');
+  const dev = devices.find((d) => d.id === deviceId);
+  const actions = actionsForType(dev?.type);
+  const [action, setAction] = useState(initial?.action ?? actions[0] ?? 'on');
+  const [time, setTime] = useState(initial?.time ?? '23:00');
+  const [days, setDays] = useState<number[]>(initial?.days ?? []);
+  const [busy, setBusy] = useState(false);
+
+  // Keep the action valid when the chosen device's type changes.
+  useEffect(() => { if (!actions.includes(action)) setAction(actions[0] ?? 'on'); }, [deviceId]);
+  const toggleDay = (n: number) => setDays((p) => p.includes(n) ? p.filter((x) => x !== n) : [...p, n]);
+
+  const submit = async () => {
+    if (!name || !deviceId || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+    setBusy(true);
+    await onSave({ name, deviceId, action, time, days, enabled: initial?.enabled ?? true });
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Name" value={name} onChange={setName} placeholder="Lights off at night" t={t} accent={accent} autoFocus />
+        <div>
+          <label className={`mb-1.5 block text-sm font-medium ${t.muted}`}>Time</label>
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+            className={`w-full rounded-xl px-3 py-2 text-sm outline-none ${t.inputBg} ${t.inputText}`} />
+        </div>
+      </div>
+      {controllable.length === 0 ? (
+        <p className={`text-sm ${t.muted}`}>No switchable devices yet. Add a Shelly, Tasmota, Hue, HTTP switch or Wake-on-LAN device first.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Device" value={deviceId} onChange={setDeviceId} t={t} accent={accent}
+            options={controllable.map((d) => ({ value: d.id, label: d.name }))} />
+          <Select label="Action" value={action} onChange={setAction} t={t} accent={accent}
+            options={actions.map((a) => ({ value: a, label: ACTION_LABEL[a] ?? a }))} />
+        </div>
+      )}
+      <div>
+        <label className={`mb-1.5 block text-sm font-medium ${t.muted}`}>Days <span className="opacity-60">(none = every day)</span></label>
+        <div className="flex flex-wrap gap-1.5">
+          {WEEKDAYS.map((d) => {
+            const on = days.includes(d.n);
+            return (
+              <button key={d.n} type="button" onClick={() => toggleDay(d.n)}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium transition-all"
+                style={on ? { background: accent, color: '#fff' } : { background: `${accent}14`, color: accent }}>{d.l}</button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Btn accent={accent} className="flex-1" onClick={submit} loading={busy} disabled={!name || !deviceId}>Save automation</Btn>
+        <Btn accent={accent} variant="secondary" onClick={onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+function AutomationsManager({ devices, t, accent, s }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; s: ShellTokens }) {
+  const [list, setList] = useState<Automation[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [edit, setEdit] = useState<Automation | null>(null);
+  const [status, setStatus] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  const load = async () => {
+    try {
+      const r = await fetch('/api/pi-agent/automations', { credentials: 'include' });
+      if (r.ok) setList((await r.json() as { automations: Automation[] }).automations ?? []);
+    } finally { setLoaded(true); }
+  };
+  useEffect(() => { void load(); }, []);
+
+  const save = async (data: Partial<Automation>) => {
+    const url = edit ? `/api/pi-agent/automations/${edit.id}` : '/api/pi-agent/automations';
+    const r = await fetch(url, { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
+    if (r.ok) { setShowForm(false); setEdit(null); await load(); }
+    else { setStatus(`✗ ${(await r.json() as { error?: string }).error ?? 'Failed'}`); setTimeout(() => setStatus(''), 4000); }
+  };
+  const toggle = async (a: Automation) => {
+    await fetch(`/api/pi-agent/automations/${a.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ enabled: !a.enabled }) });
+    await load();
+  };
+  const del = async (a: Automation) => { await fetch(`/api/pi-agent/automations/${a.id}`, { method: 'DELETE', credentials: 'include' }); await load(); };
+  const run = async (a: Automation) => {
+    setStatus('…');
+    const r = await fetch(`/api/pi-agent/automations/${a.id}/run`, { method: 'POST', credentials: 'include' });
+    setStatus(r.ok ? `✓ Ran “${a.name}”` : `✗ ${(await r.json() as { error?: string }).error ?? 'Failed'}`);
+    setTimeout(() => setStatus(''), 3000);
+  };
+  const deviceName = (id: string) => devices.find((d) => d.id === id)?.name ?? '(deleted device)';
+
+  return (
+    <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`font-semibold ${t.text}`}>Automations</h2>
+          <p className={`mt-0.5 text-sm ${t.muted}`}>Switch devices on a schedule. Runs on the Pi (its local time) — even when this dashboard is offline.</p>
+        </div>
+        {!showForm && <Btn accent={accent} size="sm" onClick={() => { setEdit(null); setShowForm(true); }}>+ Automation</Btn>}
+      </div>
+
+      {status && <StatusMsg msg={status} t={t} />}
+
+      {(showForm || edit) && (
+        <div className={`rounded-xl border p-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
+          <p className={`mb-4 text-sm font-medium ${t.text}`}>{edit ? 'Edit automation' : 'New automation'}</p>
+          <AutomationForm initial={edit ?? undefined} devices={devices} t={t} accent={accent}
+            onSave={save} onCancel={() => { setShowForm(false); setEdit(null); }} />
+        </div>
+      )}
+
+      {loaded && list.length === 0 && !showForm && (
+        <p className={`text-sm ${t.muted}`}>No automations yet. Add one to switch a device on a schedule (e.g. plug off at 23:00).</p>
+      )}
+
+      <div className="space-y-2">
+        {list.map((a) => (
+          <div key={a.id} className={`flex items-center gap-3 rounded-xl p-3 ${t.inputBg}`}>
+            <Toggle checked={a.enabled} onChange={() => void toggle(a)} accent={accent} />
+            <div className="min-w-0 flex-1">
+              <p className={`font-medium truncate ${a.enabled ? t.text : t.muted}`}>{a.name}</p>
+              <p className={`text-xs ${t.muted} truncate`}>
+                {deviceName(a.deviceId)} · {ACTION_LABEL[a.action] ?? a.action} · <span className="tabular-nums">{a.time}</span> · {daysSummary(a.days)}
+              </p>
+            </div>
+            <button onClick={() => void run(a)} title="Run now" className={`rounded-lg px-2 py-1 text-xs ${t.muted} hover:opacity-100 opacity-70`}>▶</button>
+            <button onClick={() => { setEdit(a); setShowForm(false); }} title="Edit" className={`rounded-lg px-2 py-1 text-xs ${t.muted} hover:opacity-100 opacity-70`}>✎</button>
+            <button onClick={() => void del(a)} title="Delete" className="rounded-lg px-2 py-1 text-xs text-[#FF453A] opacity-70 hover:opacity-100">✕</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AdminTab({ t, accent, s, devices, setDevices, user }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens; devices: Device[]; setDevices: (d: Device[]) => void; user: SessionUser }) {
-  const [section, setSection] = useState<'devices' | 'users' | 'system'>('devices');
+  const [section, setSection] = useState<'devices' | 'automations' | 'users' | 'system'>('devices');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('user');
@@ -3107,9 +3272,11 @@ function AdminTab({ t, accent, s, devices, setDevices, user }: { t: ReturnType<t
       <h1 className="text-[22px] font-semibold tracking-[-0.4px]" style={{ color: s.fg }}>Administration</h1>
 
       <SubNav accent={accent} s={s} value={section} onChange={setSection}
-        items={[{ key: 'devices', label: 'Devices' }, { key: 'users', label: 'Users & Roles' }, { key: 'system', label: 'System' }]} />
+        items={[{ key: 'devices', label: 'Devices' }, { key: 'automations', label: 'Automations' }, { key: 'users', label: 'Users & Roles' }, { key: 'system', label: 'System' }]} />
 
       {section === 'devices' && <DeviceManager devices={devices} setDevices={setDevices} t={t} accent={accent} s={s} />}
+
+      {section === 'automations' && <AutomationsManager devices={devices} t={t} accent={accent} s={s} />}
 
       {section === 'users' && (<>
       {/* Invite */}
@@ -3276,6 +3443,7 @@ const auditKindLabel = (k: AuditEntry['kind']): string => ({
   agent_ip_change: 'IP change',
   discovery: 'Scan',
   alert: 'Alert',
+  automation: 'Schedule',
   auth_fail: 'Auth ✗',
 }[k] ?? k);
 

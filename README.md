@@ -480,6 +480,20 @@ The detailed internal trail never leaves the Pi/Tailscale tunnel.
 
 ---
 
+## 11. Automations / Schedules
+
+Switch devices on a weekly schedule. Manage them under **Admin → Automations**: pick a
+device, an action (on / off / toggle, or wake for Wake-on-LAN), a time, and the days it
+should run (no days = every day). Toggle each rule on/off, **▶ run it now** to test, or edit/
+delete it.
+
+The scheduler runs **on the Pi**, so automations keep firing even when the public dashboard
+is offline. Times use the **Pi's local timezone** — set `TZ` in `pi-agent/compose.yml`
+(e.g. `TZ=Europe/Berlin`) so they match your home. Every fire is written to the activity log
+(kind `Schedule`) and shows up in the device's overview.
+
+---
+
 ## Development
 
 ```bash

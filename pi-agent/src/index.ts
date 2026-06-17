@@ -12,6 +12,10 @@ import { accessEnabled, grantAccess, revokeAccess, listGrants, startAccessSweepe
 import { sendNotification, configuredChannels, notificationsEnabled } from './notify.js';
 import { evaluatePiHealth, evaluateDeviceState, forgetDevice, alertThresholds } from './alerts.js';
 import { discoverBridges, pairBridge, listTargets } from './hue.js';
+import {
+  loadAutomations, listAutomations, addAutomation, updateAutomation, deleteAutomation,
+  forgetDeviceAutomations, isDue, markRun, type Automation,
+} from './automations.js';
 
 // Best-effort human-readable target for the audit log (what the Pi will contact)
 const describeTarget = (cfg: DeviceConfig): string => {
@@ -237,6 +241,41 @@ app.post('/hue/targets', async (req, res) => {
   }
 });
 
+// ── Automations / schedules ────────────────────────────────────────────────────
+
+app.get('/automations', (_req, res) => res.json({ automations: listAutomations() }));
+
+app.post('/automations', (req, res) => {
+  const a = addAutomation(req.body as Partial<Automation>);
+  if (!a) return res.status(400).json({ error: 'name, deviceId, action and a valid time (HH:MM) are required' });
+  return res.status(201).json({ automation: a });
+});
+
+app.put('/automations/:id', (req, res) => {
+  const a = updateAutomation(req.params.id, req.body as Partial<Automation>);
+  if (!a) return res.status(400).json({ error: 'Automation not found or invalid' });
+  return res.json({ automation: a });
+});
+
+app.delete('/automations/:id', (req, res) => {
+  return deleteAutomation(req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: 'Not found' });
+});
+
+// Fire an automation immediately (test button), regardless of schedule.
+app.post('/automations/:id/run', async (req, res) => {
+  const a = listAutomations().find((x) => x.id === req.params.id);
+  if (!a) return res.status(404).json({ error: 'Not found' });
+  const cfg = deviceConfigs.get(a.deviceId);
+  if (!cfg) return res.status(400).json({ error: 'Device config missing' });
+  try {
+    await executeDeviceAction(cfg, a.action, a.params ?? {});
+    logEvent({ kind: 'automation', ok: true, deviceId: a.deviceId, deviceType: cfg.type, action: a.action, target: describeTarget(cfg), message: `${a.name} (manual)` });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(502).json({ error: err instanceof Error ? err.message : 'Action failed' });
+  }
+});
+
 // ── Device config CRUD ────────────────────────────────────────────────────────
 // Dashboard saves sensitive config here. Dashboard itself never persists IPs/tokens.
 
@@ -271,6 +310,7 @@ app.delete('/devices/config/:id', (req, res) => {
   monitorStatuses.delete(req.params.id);
   monitorHistory.delete(req.params.id);
   forgetDevice(req.params.id);
+  forgetDeviceAutomations(req.params.id);
   saveConfigs();
   logEvent({ kind: 'config_delete', ok: true, deviceId: req.params.id, deviceType: existed?.type });
   return res.json({ ok: true });
@@ -327,6 +367,29 @@ const runMonitorChecks = async () => {
 
 setTimeout(() => void runMonitorChecks(), 8_000);
 setInterval(() => void runMonitorChecks(), 30_000);
+
+// ── Automation scheduler ────────────────────────────────────────────────────────
+// Checks every 30s; isDue() guards against firing twice within the same minute.
+loadAutomations();
+const runDueAutomations = async () => {
+  const now = new Date();
+  for (const a of listAutomations()) {
+    if (!isDue(a, now)) continue;
+    markRun(a.id, now.getTime());
+    const cfg = deviceConfigs.get(a.deviceId);
+    if (!cfg) {
+      logEvent({ kind: 'automation', ok: false, deviceId: a.deviceId, action: a.action, message: `${a.name}: device config missing` });
+      continue;
+    }
+    try {
+      await executeDeviceAction(cfg, a.action, a.params ?? {});
+      logEvent({ kind: 'automation', ok: true, deviceId: a.deviceId, deviceType: cfg.type, action: a.action, target: describeTarget(cfg), message: a.name });
+    } catch (err) {
+      logEvent({ kind: 'automation', ok: false, deviceId: a.deviceId, deviceType: cfg.type, action: a.action, message: `${a.name}: ${err instanceof Error ? err.message : 'failed'}` });
+    }
+  }
+};
+setInterval(() => void runDueAutomations(), 30_000);
 
 app.get('/devices/monitor', (_req, res) => {
   res.json([...monitorStatuses.values()]);

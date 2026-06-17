@@ -16,6 +16,7 @@ export type AuditKind =
   | 'agent_ip_change'
   | 'discovery'
   | 'alert'             // a notification was triggered (device offline, Pi health…)
+  | 'automation'        // a scheduled automation fired a device action
   | 'auth_fail';
 
 export type AuditEntry = {

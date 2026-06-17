@@ -1324,6 +1324,26 @@ for (const path of ['discover', 'pair', 'targets'] as const) {
   });
 }
 
+// Admin-only: automations / schedules — full CRUD proxied to the Pi, which owns the
+// scheduler and fires the actions. Method + sub-path are forwarded verbatim.
+const automationProxy = async (req: express.Request, res: express.Response, suffix: string) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!hasPiAgent()) return res.status(400).json({ error: 'Pi Agent not configured' });
+  try {
+    const init: RequestInit = { method: req.method };
+    if (req.method !== 'GET' && req.method !== 'DELETE') init.body = JSON.stringify(req.body ?? {});
+    const r = await piAgentFetch(`/automations${suffix}`, init);
+    return res.status(r.status).json(await r.json());
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+};
+app.get('/api/pi-agent/automations', (req, res) => automationProxy(req, res, ''));
+app.post('/api/pi-agent/automations', (req, res) => automationProxy(req, res, ''));
+app.put('/api/pi-agent/automations/:id', (req, res) => automationProxy(req, res, `/${req.params.id}`));
+app.delete('/api/pi-agent/automations/:id', (req, res) => automationProxy(req, res, `/${req.params.id}`));
+app.post('/api/pi-agent/automations/:id/run', (req, res) => automationProxy(req, res, `/${req.params.id}/run`));
+
 app.post('/api/pi-agent/discover', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   if (!process.env.PI_AGENT_URL || !process.env.PI_AGENT_SECRET) {
