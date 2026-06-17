@@ -131,14 +131,22 @@ type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxCo
 
 type DeviceType = DeviceConfig['type'];
 
-type PermissionFlag = 'control:plugs' | 'control:lights' | 'control:wol' | 'view:proxmox' | 'control:proxmox' | 'control:lxc' | 'view:rdp' | 'control:rdp' | 'view:ssh' | 'control:ssh' | 'view:console' | 'control:http' | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
+// Access is deny-by-default for regular users: they see and control NOTHING until an
+// admin puts them in an access group. A group scopes a set of devices (by id and/or
+// tag) and grants either view or control over them. Roles root/admin bypass groups
+// entirely; 'readonly' can never control, even where a group grants it.
+type AccessLevel = 'view' | 'control';
+type AccessGroup = {
+  id: string;
+  name: string;
+  deviceIds: string[];   // specific devices in scope
+  tags: string[];        // any device carrying one of these tags is in scope
+  level: AccessLevel;
+  members: string[];     // user ids (base64url)
+};
 
-const ALL_PERMISSIONS: PermissionFlag[] = [
-  'control:plugs', 'control:lights', 'control:wol',
-  'view:proxmox', 'control:proxmox', 'control:lxc', 'view:console',
-  'view:rdp', 'control:rdp', 'view:ssh', 'control:ssh', 'control:http',
-  'control:tasmota', 'view:docker', 'control:docker', 'view:tailscale',
-];
+// Mutating actions need 'control'; everything else (status, lists, connect URLs) needs 'view'.
+const CONTROL_ACTIONS = new Set(['on', 'off', 'toggle', 'wake', 'vm_ctrl', 'container_ctrl']);
 
 type DeviceRecord = {
   id: string;
@@ -146,9 +154,8 @@ type DeviceRecord = {
   type: DeviceType;           // always present — used for icons, filtering, permissions
   room?: string;
   icon?: string;
-  tags?: string[];            // free-form user labels for grouping/filtering
+  tags?: string[];            // free-form user labels for grouping/filtering + access scoping
   config?: DeviceConfig;      // only in legacy mode (PI_AGENT_URL not set)
-  requiredPermissions: PermissionFlag[];
   needsConfig?: boolean;      // discovered as 'unknown' — user still has to fill in the connection details
 };
 
@@ -191,7 +198,7 @@ const invites = new Map<string, InviteRecord>();
 
 const devices = new Map<string, DeviceRecord>();
 const widgets = new Map<string, WidgetRecord>();
-const userPermissions = new Map<string, PermissionFlag[]>(); // keyed by userId base64url
+const accessGroups = new Map<string, AccessGroup>();
 
 type SetupState = {
   completed: boolean;
@@ -229,7 +236,7 @@ const serializeState = () => JSON.stringify({
   setupState,
   devices: [...devices.entries()],
   widgets: [...widgets.entries()],
-  userPermissions: [...userPermissions.entries()],
+  accessGroups: [...accessGroups.entries()],
 });
 
 const hydrateState = (payload: any) => {
@@ -257,17 +264,19 @@ const hydrateState = (payload: any) => {
   Object.assign(setupState, payload.setupState ?? {});
   devices.clear();
   widgets.clear();
-  userPermissions.clear();
+  accessGroups.clear();
   for (const [k, v] of payload.devices ?? []) {
     const rec = v as any;
     // Ensure `type` field exists (migrate old records that stored type inside config)
     if (!rec.type && rec.config?.type) rec.type = rec.config.type;
+    // Old per-permission flags are gone — access is now group-based (deny-by-default)
+    delete rec.requiredPermissions;
     // In zero-knowledge mode, strip sensitive config — it belongs on the Pi Agent
     if (process.env.PI_AGENT_URL && rec.config) delete rec.config;
     devices.set(k, rec as DeviceRecord);
   }
   for (const [k, v] of payload.widgets ?? []) widgets.set(k, v as WidgetRecord);
-  for (const [k, v] of payload.userPermissions ?? []) userPermissions.set(k, v as PermissionFlag[]);
+  for (const [k, v] of payload.accessGroups ?? []) accessGroups.set(k, v as AccessGroup);
 };
 
 const persistState = async () => {
@@ -881,26 +890,46 @@ const hasPiAgent = () => Boolean(process.env.PI_AGENT_URL && process.env.PI_AGEN
 
 // Strips sensitive config before returning device to client.
 // In zero-knowledge mode the config is never stored on this server at all.
-const safeDevice = (d: DeviceRecord) => ({
+// `canControl` tells the client whether to show control buttons (server enforces it too).
+const safeDevice = (d: DeviceRecord, canControl = false) => ({
   id: d.id, name: d.name, type: d.type, room: d.room, icon: d.icon, tags: d.tags ?? [],
-  requiredPermissions: d.requiredPermissions, needsConfig: d.needsConfig ?? false,
+  needsConfig: d.needsConfig ?? false, canControl,
 });
 
 // ── Device routes ─────────────────────────────────────────────────────────────
 
-const userHasDeviceAccess = (userId: string, role: UserRole, device: DeviceRecord): boolean => {
-  if (role === 'root' || role === 'admin') return true;
-  const perms = userPermissions.get(userId) ?? [];
-  return device.requiredPermissions.every((p) => perms.includes(p));
+// Resolve a user's effective access to a device. Deny-by-default: a regular user with
+// no matching group gets 'none'. A device is in a group's scope if the group lists its
+// id or shares one of its tags. 'readonly' role is capped at 'view'.
+const deviceAccessLevel = (userId: string, role: UserRole, device: DeviceRecord): 'none' | AccessLevel => {
+  if (role === 'root' || role === 'admin') return 'control';
+  const deviceTags = device.tags ?? [];
+  let level: 'none' | AccessLevel = 'none';
+  for (const g of accessGroups.values()) {
+    if (!g.members.includes(userId)) continue;
+    const inScope = g.deviceIds.includes(device.id) || g.tags.some((tg) => deviceTags.includes(tg));
+    if (!inScope) continue;
+    if (g.level === 'control') level = 'control';
+    else if (level === 'none') level = 'view';
+  }
+  if (role === 'readonly' && level === 'control') level = 'view';
+  return level;
 };
+
+const userHasDeviceAccess = (userId: string, role: UserRole, device: DeviceRecord): boolean =>
+  deviceAccessLevel(userId, role, device) !== 'none';
+
+const userCanControlDevice = (userId: string, role: UserRole, device: DeviceRecord): boolean =>
+  deviceAccessLevel(userId, role, device) === 'control';
 
 app.get('/api/devices', (req, res) => {
   const user = getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   const userId = Buffer.from(user.id).toString('base64url');
   const list = [...devices.values()]
-    .filter((d) => userHasDeviceAccess(userId, user.role, d))
-    .map(safeDevice); // never return sensitive config to client
+    .map((d) => ({ d, level: deviceAccessLevel(userId, user.role, d) }))
+    .filter(({ level }) => level !== 'none')
+    .map(({ d, level }) => safeDevice(d, level === 'control')); // never return sensitive config to client
   return res.json({ devices: list });
 });
 
@@ -926,7 +955,7 @@ app.get('/api/devices/:id/config', async (req, res) => {
 
 app.post('/api/devices', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { name, room, icon, tags, config, requiredPermissions, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (!name || !config || !config.type) return res.status(400).json({ error: 'name and config.type are required' });
   const id = crypto.randomBytes(12).toString('base64url');
   const cleanTags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : undefined;
@@ -939,28 +968,27 @@ app.post('/api/devices', async (req, res) => {
     } catch (err) {
       return res.status(502).json({ error: `Pi Agent unreachable: ${(err as Error).message}` });
     }
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, requiredPermissions: requiredPermissions ?? [], needsConfig: needsConfig || undefined };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, needsConfig: needsConfig || undefined };
     devices.set(id, device);
   } else {
     // Legacy mode: store full config on dashboard
-    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, config, requiredPermissions: requiredPermissions ?? [], needsConfig: needsConfig || undefined };
+    const device: DeviceRecord = { id, name, type: config.type, room, icon, tags: cleanTags, config, needsConfig: needsConfig || undefined };
     devices.set(id, device);
   }
 
   void persistState();
-  return res.status(201).json({ device: safeDevice(devices.get(id)!) });
+  return res.status(201).json({ device: safeDevice(devices.get(id)!, true) });
 });
 
 app.patch('/api/devices/:id', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
   const device = devices.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  const { name, room, icon, tags, config, requiredPermissions, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
+  const { name, room, icon, tags, config, needsConfig } = req.body as Partial<DeviceRecord & { config: DeviceConfig }>;
   if (name !== undefined) device.name = name;
   if (room !== undefined) device.room = room;
   if (icon !== undefined) device.icon = icon;
   if (tags !== undefined) device.tags = Array.isArray(tags) ? tags.map((x) => String(x).trim()).filter(Boolean).slice(0, 12) : [];
-  if (requiredPermissions !== undefined) device.requiredPermissions = requiredPermissions;
   if (needsConfig !== undefined) device.needsConfig = needsConfig || undefined;
   if (config !== undefined) {
     device.type = config.type;
@@ -975,7 +1003,7 @@ app.patch('/api/devices/:id', async (req, res) => {
     }
   }
   void persistState();
-  return res.json({ device: safeDevice(device) });
+  return res.json({ device: safeDevice(device, true) });
 });
 
 app.delete('/api/devices/:id', async (req, res) => {
@@ -987,6 +1015,11 @@ app.delete('/api/devices/:id', async (req, res) => {
     } catch { /* non-fatal */ }
   }
   devices.delete(req.params.id);
+  // Drop the device from any access group that referenced it directly
+  for (const g of accessGroups.values()) {
+    const i = g.deviceIds.indexOf(req.params.id);
+    if (i !== -1) g.deviceIds.splice(i, 1);
+  }
   void persistState();
   return res.json({ ok: true });
 });
@@ -997,10 +1030,15 @@ app.post('/api/devices/:id/action', async (req, res) => {
   const device = devices.get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
   const userId = Buffer.from(user.id).toString('base64url');
-  if (!userHasDeviceAccess(userId, user.role, device)) return res.status(403).json({ error: 'Permission denied' });
+  const level = deviceAccessLevel(userId, user.role, device);
+  if (level === 'none') return res.status(403).json({ error: 'Permission denied' });
 
   const { action } = req.body as { action?: string };
   if (!action) return res.status(400).json({ error: 'action is required' });
+  // Mutating actions require control; view-level users can only read status / lists / connect URLs.
+  if (CONTROL_ACTIONS.has(action) && level !== 'control') {
+    return res.status(403).json({ error: 'Control access required' });
+  }
 
   // Zero-knowledge mode: forward to Pi Agent using only the device ID — no config sent over the wire.
   // `actor` (the user's email) is forwarded so the Pi's audit log records WHO triggered the action.
@@ -1295,21 +1333,55 @@ app.delete('/api/widgets/:id', (req, res) => {
   return res.json({ ok: true });
 });
 
-// ── Permission routes ─────────────────────────────────────────────────────────
+// ── Access group routes (admin) ─────────────────────────────────────────────────
+// Deny-by-default access control. A group scopes devices (by id and/or tag) and grants
+// view or control over them to its members. No group = no access.
 
-app.get('/api/admin/users/:userId/permissions', (req, res) => {
+const sanitizeStrings = (v: unknown, max = 50): string[] =>
+  Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean))].slice(0, max) : [];
+
+app.get('/api/admin/groups', (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  return res.json({ permissions: userPermissions.get(req.params.userId) ?? [] });
+  return res.json({ groups: [...accessGroups.values()] });
 });
 
-app.put('/api/admin/users/:userId/permissions', (req, res) => {
+app.post('/api/admin/groups', (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
-  const { permissions } = req.body as { permissions?: string[] };
-  if (!Array.isArray(permissions)) return res.status(400).json({ error: 'permissions array required' });
-  const safe = permissions.filter((p): p is PermissionFlag => ALL_PERMISSIONS.includes(p as PermissionFlag));
-  userPermissions.set(req.params.userId, safe);
+  const { name, deviceIds, tags, level, members } = req.body as Partial<AccessGroup>;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  const id = crypto.randomBytes(9).toString('base64url');
+  const group: AccessGroup = {
+    id,
+    name: String(name).trim().slice(0, 60),
+    deviceIds: sanitizeStrings(deviceIds),
+    tags: sanitizeStrings(tags),
+    level: level === 'control' ? 'control' : 'view',
+    members: sanitizeStrings(members),
+  };
+  accessGroups.set(id, group);
   void persistState();
-  return res.json({ ok: true, permissions: safe });
+  return res.status(201).json({ group });
+});
+
+app.patch('/api/admin/groups/:id', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  const group = accessGroups.get(req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  const { name, deviceIds, tags, level, members } = req.body as Partial<AccessGroup>;
+  if (name !== undefined) group.name = String(name).trim().slice(0, 60) || group.name;
+  if (deviceIds !== undefined) group.deviceIds = sanitizeStrings(deviceIds);
+  if (tags !== undefined) group.tags = sanitizeStrings(tags);
+  if (level !== undefined) group.level = level === 'control' ? 'control' : 'view';
+  if (members !== undefined) group.members = sanitizeStrings(members);
+  void persistState();
+  return res.json({ group });
+});
+
+app.delete('/api/admin/groups/:id', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+  if (!accessGroups.delete(req.params.id)) return res.status(404).json({ error: 'Group not found' });
+  void persistState();
+  return res.json({ ok: true });
 });
 
 // ── Audit log (admin) ──────────────────────────────────────────────────────────

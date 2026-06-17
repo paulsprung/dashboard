@@ -12,30 +12,16 @@ type SetupStatus = {
 };
 type AdminUser = { id: string; email: string; role: Role; hasPasskey: boolean };
 
-type PermissionFlag =
-  | 'control:plugs' | 'control:lights' | 'control:wol'
-  | 'view:proxmox' | 'control:proxmox' | 'control:lxc' | 'view:rdp' | 'control:rdp'
-  | 'view:ssh' | 'control:ssh' | 'view:console' | 'control:http'
-  | 'control:tasmota' | 'view:docker' | 'control:docker' | 'view:tailscale';
-
-const ALL_PERMISSIONS: { flag: PermissionFlag; label: string; desc: string }[] = [
-  { flag: 'control:plugs',    label: 'Power outlets',   desc: 'Turn smart plugs on/off' },
-  { flag: 'control:lights',   label: 'Lights',          desc: 'Control lights' },
-  { flag: 'control:wol',      label: 'Wake-on-LAN',      desc: 'Wake devices via WOL' },
-  { flag: 'view:proxmox',     label: 'Proxmox (read)',  desc: 'View VMs & containers' },
-  { flag: 'control:proxmox',  label: 'Proxmox VMs',      desc: 'Start/stop KVM VMs' },
-  { flag: 'control:lxc',      label: 'LXC containers',  desc: 'Start/stop LXC containers' },
-  { flag: 'view:console',     label: 'Console/Remote',  desc: 'Open web console & remote sessions' },
-  { flag: 'view:rdp',         label: 'Show RDP',        desc: 'View RDP connection details' },
-  { flag: 'control:rdp',      label: 'RDP session',     desc: 'Start RDP session' },
-  { flag: 'view:ssh',         label: 'Show SSH',        desc: 'View SSH connection details' },
-  { flag: 'control:ssh',      label: 'SSH session',     desc: 'Start SSH session' },
-  { flag: 'control:http',     label: 'HTTP devices',    desc: 'Send HTTP device commands' },
-  { flag: 'control:tasmota',  label: 'Tasmota devices', desc: 'Control Tasmota plugs' },
-  { flag: 'view:docker',      label: 'Docker (read)',   desc: 'View container status' },
-  { flag: 'control:docker',   label: 'Docker (control)',desc: 'Start/stop containers' },
-  { flag: 'view:tailscale',   label: 'Tailscale',        desc: 'View network peers' },
-];
+// Access level a group grants over the devices it scopes.
+type AccessLevel = 'view' | 'control';
+type AccessGroup = {
+  id: string;
+  name: string;
+  deviceIds: string[];
+  tags: string[];
+  level: AccessLevel;
+  members: string[]; // user ids (base64url)
+};
 
 type DeviceConfig =
   | { type: 'shelly_plug';  ip: string; channel?: number }
@@ -52,10 +38,10 @@ type DeviceConfig =
 
 type Device = {
   id: string; name: string; type: string; room?: string; icon?: string;
-  tags?: string[]; // free-form user labels for grouping/filtering
+  tags?: string[]; // free-form user labels for grouping/filtering + access scoping
   config?: DeviceConfig; // absent in zero-knowledge mode (Pi Agent configured)
-  requiredPermissions: PermissionFlag[];
   needsConfig?: boolean; // discovered as 'unknown' — user still has to fill in connection details
+  canControl?: boolean; // whether the current user may control (vs only view) this device
 };
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
@@ -604,17 +590,6 @@ const deviceTypeIcon = (type: string) => {
   return map[type] ?? '📱';
 };
 
-const deviceTypePermission = (type: string): PermissionFlag | null => {
-  const map: Record<string, PermissionFlag> = {
-    shelly_plug: 'control:plugs', shelly_light: 'control:lights',
-    tasmota: 'control:tasmota', wol: 'control:wol',
-    proxmox: 'view:proxmox', docker: 'view:docker',
-    rdp: 'view:rdp', ssh: 'view:ssh', web: 'view:console',
-    tailscale: 'view:tailscale', http: 'control:http',
-  };
-  return map[type] ?? null;
-};
-
 // ── Device Form (add/edit) ────────────────────────────────────────────────────
 
 function DeviceForm({
@@ -648,10 +623,8 @@ function DeviceForm({
   const [dockerPort, setDockerPort] = useState(String((initial?.config as any)?.port ?? ''));
   const [tailscaleApiKey, setTailscaleApiKey] = useState((initial?.config as any)?.apiKey ?? '');
   const [tailscaleTailnet, setTailscaleTailnet] = useState((initial?.config as any)?.tailnet ?? '');
-  const [perms, setPerms] = useState<PermissionFlag[]>(initial?.requiredPermissions ?? []);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
-  const [showAdvancedPerms, setShowAdvancedPerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
 
@@ -688,13 +661,6 @@ function DeviceForm({
       .finally(() => setConfigLoading(false));
   }, [isEdit, initial?.id]);
 
-  // auto-suggest permission when type changes
-  useEffect(() => {
-    const suggested = deviceTypePermission(type);
-    if (suggested && !perms.includes(suggested)) setPerms([suggested]);
-    else if (!suggested) setPerms([]);
-  }, [type]);
-
   const buildConfig = (): DeviceConfig | null => {
     if (type === 'shelly_plug') return { type, ip, channel: Number(channel) };
     if (type === 'shelly_light') return { type, ip, channel: Number(channel) };
@@ -714,12 +680,9 @@ function DeviceForm({
     const config = buildConfig();
     if (!name || !config) return;
     setLoading(true);
-    await onSave({ name, type: config.type, room: room || undefined, tags, config, requiredPermissions: perms });
+    await onSave({ name, type: config.type, room: room || undefined, tags, config });
     setLoading(false);
   };
-
-  const togglePerm = (p: PermissionFlag) =>
-    setPerms((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
 
   return (
     <div className="space-y-4">
@@ -834,36 +797,10 @@ function DeviceForm({
         <p className={`text-xs ${t.muted}`}>Confirm with Enter or comma. Tags help group and filter on the Devices tab.</p>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className={`block text-sm font-medium ${t.muted}`}>Visible to users with</label>
-          <button type="button" onClick={() => setShowAdvancedPerms((v) => !v)}
-            className="text-xs font-medium" style={{ color: accent }}>
-            {showAdvancedPerms ? 'Done' : 'Edit'}
-          </button>
-        </div>
-        {!showAdvancedPerms ? (
-          <div className={`flex flex-wrap gap-1.5 rounded-xl px-3 py-2.5 ${t.inputBg}`}>
-            {perms.length === 0
-              ? <span className={`text-sm ${t.muted}`}>Everyone (no permission required)</span>
-              : perms.map((f) => (
-                  <span key={f} className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: `${accent}1A`, color: accent }}>
-                    {ALL_PERMISSIONS.find((p) => p.flag === f)?.label ?? f}
-                  </span>
-                ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            {ALL_PERMISSIONS.map(({ flag, label }) => (
-              <label key={flag} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm transition-all ${t.inputBg} ${t.navHover}`}>
-                <input type="checkbox" checked={perms.includes(flag)} onChange={() => togglePerm(flag)} className="rounded" />
-                <span className={t.text}>{label}</span>
-              </label>
-            ))}
-          </div>
-        )}
-        <p className={`text-xs ${t.muted}`}>Grant these capabilities to users under Admin → Users &amp; Roles.</p>
-      </div>
+      <p className={`text-xs ${t.muted}`}>
+        Access is deny-by-default. Give this device to users by adding it (or one of its tags)
+        to an access group under Admin → Users &amp; Roles.
+      </p>
 
       <div className="flex gap-2 pt-1">
         <Btn accent={accent} className="flex-1" onClick={save} loading={loading}
@@ -2054,9 +1991,11 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
     setDiscoverConfigured(d.configured); setDiscovered(d.devices ?? []);
   };
   // Already-configured hosts are matched on the Pi (by MAC/IP) and hidden here.
-  const newDiscovered = discovered.filter((dd) => !dd.configuredDeviceId);
+  // Only recognised device types are offered for adding; unidentified hosts live in the
+  // Discovery tab's network monitor instead.
+  const newDiscovered = discovered.filter((dd) => !dd.configuredDeviceId && dd.type !== 'unknown');
   const addDiscovered = (dd: DiscoveredDevice) => {
-    const type = (dd.type === 'unknown' || dd.type === 'http') ? 'web' : dd.type;
+    const type = dd.type === 'http' ? 'web' : dd.type;
     setPrefill({ name: dd.hostname || dd.vendor || `${type} ${dd.ip}`, type, config: { type, ip: dd.ip } as DeviceConfig });
     setShowDeviceForm(true); setEditDevice(null);
   };
@@ -2465,16 +2404,16 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
                     </p>
                   )}
 
-                  {/* Actions */}
+                  {/* Actions — control buttons are hidden for view-only access */}
                   <div className="flex flex-wrap gap-2">
                     {(device.type === 'shelly_plug' || device.type === 'shelly_light') && (
                       <>
-                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
-                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
+                        {device.canControl !== false && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>}
+                        {device.canControl !== false && <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>}
                         <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'status')}>Status</Btn>
                       </>
                     )}
-                    {device.type === 'wol' && (
+                    {device.type === 'wol' && device.canControl !== false && (
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Wake</Btn>
                     )}
                     {device.type === 'proxmox' && (
@@ -2486,7 +2425,7 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
                     {device.type === 'web' && (
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'open')}>🌐 Open</Btn>
                     )}
-                    {device.type === 'http' && (
+                    {device.type === 'http' && device.canControl !== false && (
                       <>
                         <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
                         <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
@@ -2494,10 +2433,13 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
                     )}
                     {device.type === 'tasmota' && (
                       <>
-                        <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
-                        <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
+                        {device.canControl !== false && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>}
+                        {device.canControl !== false && <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>}
                         <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energy</Btn>
                       </>
+                    )}
+                    {device.canControl === false && (device.type === 'wol' || device.type === 'http') && (
+                      <span className={`text-xs ${t.muted}`}>View only</span>
                     )}
                     {device.type === 'docker' && (
                       <Btn accent={accent} size="sm" onClick={() => doAction(device, 'list_containers')}>Load containers</Btn>
@@ -2537,6 +2479,99 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
 
 // ── Admin tab ─────────────────────────────────────────────────────────────────
 
+// Create/edit an access group: pick members, scope devices (by id and/or tag), set level.
+function AccessGroupForm({ initial, users, devices, t, accent, onSave, onCancel }: {
+  initial?: AccessGroup; users: AdminUser[]; devices: Device[];
+  t: ReturnType<typeof tok>; accent: string;
+  onSave: (data: Omit<AccessGroup, 'id'>) => void; onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [level, setLevel] = useState<AccessLevel>(initial?.level ?? 'control');
+  const [members, setMembers] = useState<string[]>(initial?.members ?? []);
+  const [deviceIds, setDeviceIds] = useState<string[]>(initial?.deviceIds ?? []);
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagDraft, setTagDraft] = useState('');
+  // Only regular users/readonly need group access — admins already have everything.
+  const grantable = users.filter((u) => u.role === 'user' || u.role === 'readonly');
+  const allTags = [...new Set(devices.flatMap((d) => d.tags ?? []))];
+
+  const toggle = (arr: string[], set: (v: string[]) => void, id: string) =>
+    set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  const addTag = (raw: string) => {
+    const v = raw.trim().replace(/,$/, '').trim();
+    if (v && !tags.includes(v)) setTags([...tags, v]);
+    setTagDraft('');
+  };
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-4 ${t.border}`} style={{ borderColor: `${accent}25` }}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input label="Group name" value={name} onChange={setName} placeholder="Kids" t={t} accent={accent} autoFocus />
+        <Select label="Access level" value={level} onChange={(v) => setLevel(v as AccessLevel)}
+          options={[{ value: 'control', label: 'Control (use devices)' }, { value: 'view', label: 'View only' }]} t={t} accent={accent} />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className={`block text-sm font-medium ${t.muted}`}>Members</label>
+        {grantable.length === 0 ? (
+          <p className={`text-xs ${t.muted}`}>No regular users yet — invite one under "Invite user".</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {grantable.map((u) => (
+              <label key={u.id} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm ${t.inputBg} ${t.navHover}`}>
+                <input type="checkbox" checked={members.includes(u.id)} onChange={() => toggle(members, setMembers, u.id)} className="rounded" />
+                <span className={`truncate ${t.text}`}>{u.email.split('@')[0]}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className={`block text-sm font-medium ${t.muted}`}>Devices</label>
+        {devices.length === 0 ? (
+          <p className={`text-xs ${t.muted}`}>No devices configured yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+            {devices.map((d) => (
+              <label key={d.id} className={`flex items-center gap-2 cursor-pointer rounded-xl px-3 py-2 text-sm ${t.inputBg} ${t.navHover}`}>
+                <input type="checkbox" checked={deviceIds.includes(d.id)} onChange={() => toggle(deviceIds, setDeviceIds, d.id)} className="rounded" />
+                <span className="flex-shrink-0">{d.icon ?? deviceTypeIcon(d.type)}</span>
+                <span className={`truncate ${t.text}`}>{d.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className={`block text-sm font-medium ${t.muted}`}>…or by tag</label>
+        <div className={`flex flex-wrap items-center gap-1.5 rounded-xl px-3 py-2 ${t.inputBg}`}>
+          {tags.map((tag) => (
+            <span key={tag} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: `${accent}1A`, color: accent }}>
+              #{tag}
+              <button type="button" onClick={() => setTags(tags.filter((x) => x !== tag))} className="opacity-70 hover:opacity-100">×</button>
+            </span>
+          ))}
+          <input value={tagDraft} onChange={(e) => setTagDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); } }}
+            onBlur={() => tagDraft && addTag(tagDraft)}
+            list="group-tag-suggestions" placeholder={tags.length ? '' : 'wohnzimmer'}
+            className={`flex-1 min-w-[80px] bg-transparent text-sm outline-none ${t.inputText}`} />
+          <datalist id="group-tag-suggestions">{allTags.map((tg) => <option key={tg} value={tg} />)}</datalist>
+        </div>
+        <p className={`text-xs ${t.muted}`}>Any device carrying one of these tags is in scope — handy for "all living-room lights".</p>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Btn accent={accent} className="flex-1" disabled={!name.trim()}
+          onClick={() => onSave({ name: name.trim(), level, members, deviceIds, tags })}>Save group</Btn>
+        <Btn accent={accent} variant="secondary" onClick={onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
 function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof tok>; accent: string; s: ShellTokens; devices: Device[]; setDevices: (d: Device[]) => void }) {
   const [section, setSection] = useState<'devices' | 'users' | 'system'>('devices');
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -2545,14 +2580,14 @@ function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof 
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [status, setStatus] = useState('');
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
-  const [userPerms, setUserPerms] = useState<PermissionFlag[]>([]);
-  const [permsLoading, setPermsLoading] = useState(false);
+  const [groups, setGroups] = useState<AccessGroup[]>([]);
+  const [editGroup, setEditGroup] = useState<AccessGroup | null>(null);
+  const [showGroupForm, setShowGroupForm] = useState(false);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditConfigured, setAuditConfigured] = useState(true);
   const [auditLoading, setAuditLoading] = useState(false);
 
-  useEffect(() => { void loadUsers(); void loadAudit(); }, []);
+  useEffect(() => { void loadUsers(); void loadGroups(); void loadAudit(); }, []);
 
   const loadAudit = async () => {
     setAuditLoading(true);
@@ -2573,27 +2608,28 @@ function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof 
     if (r.ok) setAdminUsers((await r.json() as { users: AdminUser[] }).users);
   };
 
-  const loadUserPerms = async (u: AdminUser) => {
-    setSelectedUser(u);
-    setPermsLoading(true);
-    const r = await fetch(`/api/admin/users/${u.id}/permissions`, { credentials: 'include' });
-    if (r.ok) setUserPerms((await r.json() as { permissions: PermissionFlag[] }).permissions);
-    setPermsLoading(false);
+  const loadGroups = async () => {
+    const r = await fetch('/api/admin/groups', { credentials: 'include' });
+    if (r.ok) setGroups((await r.json() as { groups: AccessGroup[] }).groups);
   };
 
-  const savePerms = async () => {
-    if (!selectedUser) return;
-    const r = await fetch(`/api/admin/users/${selectedUser.id}/permissions`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', body: JSON.stringify({ permissions: userPerms }),
+  const saveGroup = async (data: Omit<AccessGroup, 'id'>, id?: string) => {
+    const r = await fetch(id ? `/api/admin/groups/${id}` : '/api/admin/groups', {
+      method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify(data),
     });
-    if (r.ok) setStatus('✓ Permissions saved');
-    else setStatus(`✗ ${await readErr(r, 'Error')}`);
+    if (r.ok) {
+      await loadGroups();
+      setShowGroupForm(false); setEditGroup(null);
+      setStatus('✓ Group saved');
+    } else setStatus(`✗ ${await readErr(r, 'Error')}`);
     setTimeout(() => setStatus(''), 2500);
   };
 
-  const togglePerm = (p: PermissionFlag) =>
-    setUserPerms((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
+  const deleteGroup = async (id: string) => {
+    const r = await fetch(`/api/admin/groups/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (r.ok) setGroups(groups.filter((g) => g.id !== id));
+  };
 
   const createInvite = async () => {
     setInviteLoading(true); setStatus('');
@@ -2647,55 +2683,83 @@ function AdminTab({ t, accent, s, devices, setDevices }: { t: ReturnType<typeof 
         )}
       </section>
 
-      {/* Users + Permissions */}
+      {/* Users */}
       <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
-        <h2 className={`font-semibold ${t.text}`}>Users & permissions</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* User list */}
-          <div className="space-y-2">
-            {adminUsers.map((u) => (
-              <button key={u.id}
-                onClick={() => loadUserPerms(u)}
-                className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition-all ${t.border} ${t.navHover} ${selectedUser?.id === u.id ? t.navActive : ''}`}
-                style={selectedUser?.id === u.id ? { borderColor: `${accent}30` } : {}}>
-                <div>
+        <h2 className={`font-semibold ${t.text}`}>Users</h2>
+        <div className="space-y-2">
+          {adminUsers.map((u) => {
+            const memberOf = groups.filter((g) => g.members.includes(u.id));
+            return (
+              <div key={u.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${t.border}`}>
+                <div className="min-w-0">
                   <span className={t.text}>{u.email}</span>
-                  <p className={`text-xs capitalize ${t.muted}`}>{u.role}</p>
+                  <p className={`text-xs capitalize ${t.muted}`}>
+                    {u.role}
+                    {u.role === 'user' || u.role === 'readonly'
+                      ? ` · ${memberOf.length ? memberOf.map((g) => g.name).join(', ') : 'no groups — no access'}`
+                      : ' · full access'}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    u.hasPasskey ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
-                  }`}>{u.hasPasskey ? 'Passkey' : 'No passkey'}</span>
-                  <span className={`text-xs ${t.muted}`}>›</span>
-                </div>
-              </button>
-            ))}
-          </div>
+                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  u.hasPasskey ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
+                }`}>{u.hasPasskey ? 'Passkey' : 'No passkey'}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-          {/* Permission editor */}
-          {selectedUser && (
-            <div className={`rounded-xl border p-4 space-y-3 ${t.border}`} style={{ borderColor: `${accent}20` }}>
-              <p className={`text-sm font-medium ${t.text}`}>Permissions for {selectedUser.email.split('@')[0]}</p>
-              {permsLoading ? (
-                <Spinner size={20} color={accent} />
-              ) : (
-                <div className="space-y-1.5">
-                  {ALL_PERMISSIONS.map(({ flag, label, desc }) => (
-                    <label key={flag} className={`flex items-start gap-2.5 cursor-pointer rounded-lg px-3 py-2 text-sm transition-all ${t.navHover}`}>
-                      <input type="checkbox" checked={userPerms.includes(flag)} onChange={() => togglePerm(flag)}
-                        className="mt-0.5 rounded flex-shrink-0" />
-                      <div>
-                        <p className={t.text}>{label}</p>
-                        <p className={`text-xs ${t.muted}`}>{desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <Btn accent={accent} size="sm" className="w-full" onClick={savePerms}>Save</Btn>
-              {status && <StatusMsg msg={status} t={t} />}
-            </div>
+      {/* Access groups */}
+      <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-4`} style={{ boxShadow: s.cardShadow }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className={`font-semibold ${t.text}`}>Access groups</h2>
+            <p className={`mt-0.5 text-sm ${t.muted}`}>Users have no access by default. A group grants its members view or control over the devices it scopes.</p>
+          </div>
+          {!showGroupForm && !editGroup && (
+            <Btn accent={accent} size="sm" onClick={() => { setEditGroup(null); setShowGroupForm(true); }}>+ Group</Btn>
           )}
+        </div>
+        {status && <StatusMsg msg={status} t={t} />}
+
+        {(showGroupForm || editGroup) && (
+          <AccessGroupForm
+            initial={editGroup ?? undefined} users={adminUsers} devices={devices} t={t} accent={accent}
+            onSave={(data) => saveGroup(data, editGroup?.id)}
+            onCancel={() => { setShowGroupForm(false); setEditGroup(null); }}
+          />
+        )}
+
+        {groups.length === 0 && !showGroupForm && !editGroup && (
+          <p className={`text-sm ${t.muted}`}>No groups yet. Create one to give a user access to specific devices.</p>
+        )}
+        <div className="space-y-2">
+          {groups.map((g) => {
+            const memberEmails = g.members.map((id) => adminUsers.find((u) => u.id === id)?.email.split('@')[0] ?? '?');
+            const deviceNames = g.deviceIds.map((id) => devices.find((d) => d.id === id)?.name ?? '?');
+            return (
+              <div key={g.id} className={`flex items-start justify-between rounded-xl border px-4 py-3 ${t.border}`}>
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium flex items-center gap-2 ${t.text}`}>
+                    {g.name}
+                    <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                      style={{ background: g.level === 'control' ? `${accent}1A` : '#8884', color: g.level === 'control' ? accent : undefined }}>
+                      {g.level}
+                    </span>
+                  </p>
+                  <p className={`mt-0.5 text-xs ${t.muted}`}>
+                    {memberEmails.length ? `👤 ${memberEmails.join(', ')}` : '👤 no members'}
+                    {' · '}
+                    {[...deviceNames, ...g.tags.map((x) => `#${x}`)].join(', ') || 'no devices'}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 gap-2">
+                  <Btn accent={accent} variant="secondary" size="sm" onClick={() => { setEditGroup(g); setShowGroupForm(false); }}>✎</Btn>
+                  <Btn accent={accent} variant="danger" size="sm" onClick={() => deleteGroup(g.id)}>×</Btn>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
       </>)}
@@ -2778,8 +2842,23 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [lastScan, setLastScan] = useState<number | null>(null);
+  const [piExpanded, setPiExpanded] = useState(false);
+  const [piLog, setPiLog] = useState<AuditEntry[]>([]);
+  const [piLogLoading, setPiLogLoading] = useState(false);
 
   useEffect(() => { void load(); }, []);
+
+  const togglePiDetails = async () => {
+    const next = !piExpanded;
+    setPiExpanded(next);
+    if (next && piLog.length === 0) {
+      setPiLogLoading(true);
+      try {
+        const r = await fetch('/api/admin/audit?limit=40', { credentials: 'include' });
+        if (r.ok) setPiLog((await r.json() as { entries: AuditEntry[] }).entries ?? []);
+      } finally { setPiLogLoading(false); }
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -2813,31 +2892,27 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   };
 
   // Already-configured hosts are matched on the Pi by MAC/IP (robust against renames)
-  // and hidden here — only genuinely new devices remain in the list.
+  // and hidden here. Only recognised device types can be added directly; unidentified
+  // hosts still show up below in the network monitor (presence only, not addable).
   const newDevices = discovered.filter((dd) => !dd.configuredDeviceId);
+  const addable = newDevices.filter((dd) => dd.type !== 'unknown');
 
   const addDiscovered = async (dd: DiscoveredDevice) => {
-    // Devices we couldn't fingerprint are added as a "web" host but flagged so the user
-    // fills in the real type / connection details afterwards. Recognised types are added
-    // fully configured with the right type, icon and hostname.
-    const unknown = dd.type === 'unknown' || dd.type === 'http';
-    const type = unknown ? 'web' : dd.type;
-    const suggested = deviceTypePermission(type);
+    // Generic HTTP services are opened as a "web" device; everything else keeps its
+    // fingerprinted type, icon and hostname.
+    const type = dd.type === 'http' ? 'web' : dd.type;
     const config: DeviceConfig = { type, ip: dd.ip } as DeviceConfig;
     const r = await fetch('/api/devices', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({
         name: dd.hostname || dd.vendor || `${type} ${dd.ip}`,
         type, config,
-        requiredPermissions: suggested ? [suggested] : [],
-        needsConfig: unknown || undefined,
       }),
     });
     if (r.ok) {
       const { device } = await r.json() as { device: Device };
       setDevices([...devices, device]);
-      const hint = device.needsConfig ? ' — finish setup in Devices'
-        : (type === 'proxmox' || type === 'docker') ? ' — add credentials in Settings' : '';
+      const hint = (type === 'proxmox' || type === 'docker') ? ' — add credentials in Settings' : '';
       setStatus(`✓ ${device.name} added${hint}`);
     } else {
       setStatus(`✗ ${await readErr(r, 'Could not add device')}`);
@@ -2865,14 +2940,17 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
         </div>
       ) : (
         <>
-          {/* Pi Agent status */}
+          {/* Pi Agent status — click to expand detailed stats + activity log */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5`} style={{ boxShadow: s.cardShadow }}>
-            <div className="flex items-center justify-between">
+            <button type="button" onClick={togglePiDetails} className="flex w-full items-center justify-between text-left">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-[12px] text-[20px]"
                   style={{ background: `${accent}1A` }}>🛡️</div>
                 <div>
-                  <p className={`text-sm font-semibold ${t.text}`}>Pi Agent</p>
+                  <p className={`text-sm font-semibold ${t.text} flex items-center gap-1.5`}>
+                    Pi Agent
+                    <span className={`text-xs transition-transform ${piExpanded ? 'rotate-90' : ''} ${t.muted}`}>›</span>
+                  </p>
                   <p className={`text-xs ${t.muted}`}>
                     {pi?.connected
                       ? `v${pi.version ?? '?'} · up ${formatUptime(pi.uptime)} · ${agents.length} host agent${agents.length !== 1 ? 's' : ''}`
@@ -2891,7 +2969,7 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                     animation: pi?.connected ? 'pulse 2.4s ease-in-out infinite' : 'none' }} />
                 {pi?.connected ? 'Connected' : 'Offline'}
               </span>
-            </div>
+            </button>
 
             {pi?.connected && pi.metrics && (
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2920,44 +2998,126 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
                 })}
               </div>
             )}
+
+            {/* Expanded drill-down: finer stats + the Pi's internal activity log */}
+            {piExpanded && (
+              <div className={`mt-4 space-y-4 border-t pt-4 ${t.border}`}>
+                {pi?.connected && pi.metrics ? (
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                    {[
+                      ['CPU cores', String(pi.metrics.cpus)],
+                      ['Load (1m)', String(pi.metrics.load1)],
+                      ['Memory', `${fmtGB(pi.metrics.memUsed)} / ${fmtGB(pi.metrics.memTotal)}`],
+                      ['Disk', pi.metrics.diskTotal != null ? `${fmtGB(pi.metrics.diskUsed)} / ${fmtGB(pi.metrics.diskTotal)}` : '–'],
+                      ['CPU temp', pi.metrics.tempC != null ? `${pi.metrics.tempC} °C` : '–'],
+                      ['OS uptime', formatUptime(pi.metrics.osUptime)],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-2">
+                        <dt className={t.muted}>{k}</dt>
+                        <dd className={`font-mono ${t.text}`}>{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className={`text-sm ${t.muted}`}>Detailed metrics unavailable — Pi Agent offline.</p>
+                )}
+
+                <div>
+                  <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${t.muted}`}>Recent activity</p>
+                  {piLogLoading ? (
+                    <Spinner size={18} color={accent} />
+                  ) : piLog.length === 0 ? (
+                    <p className={`text-sm ${t.muted}`}>No activity recorded yet.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-72 overflow-y-auto">
+                      {piLog.map((e, i) => (
+                        <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs ${t.navHover}`}>
+                          <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${e.ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <span className={`flex-shrink-0 font-mono ${t.muted}`}>{new Date(e.ts).toLocaleTimeString()}</span>
+                          <span className="flex-shrink-0 rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${accent}15`, color: accent }}>{auditKindLabel(e.kind)}</span>
+                          <span className={`min-w-0 flex-1 truncate ${t.text}`}>
+                            {[e.action, e.deviceType, e.target].filter(Boolean).join(' · ')}
+                            {e.message ? ` — ${e.message}` : ''}
+                          </span>
+                          {e.actor && <span className={`flex-shrink-0 ${t.muted}`}>{e.actor.split('@')[0]}</span>}
+                          {typeof e.latencyMs === 'number' && <span className={`flex-shrink-0 font-mono ${t.muted}`}>{e.latencyMs}ms</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
-          {/* Discovered devices */}
+          {/* Discovered devices (recognised types only — addable) */}
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <div className="flex items-center justify-between">
               <h2 className={`font-semibold ${t.text}`}>Discovered devices</h2>
               <span className={`text-xs ${t.muted}`}>
-                {lastScan ? `Last scan: ${new Date(lastScan).toLocaleTimeString()}` : `${newDevices.length} new`}
+                {lastScan ? `Last scan: ${new Date(lastScan).toLocaleTimeString()}` : `${addable.length} new`}
               </span>
             </div>
             {loading ? (
               <Spinner size={20} color={accent} />
-            ) : newDevices.length === 0 ? (
+            ) : addable.length === 0 ? (
               <p className={`text-sm ${t.muted}`}>
                 {discovered.length > 0
-                  ? 'All discovered devices are already configured.'
+                  ? 'No new recognised devices — see the network monitor below for everything on the LAN.'
                   : 'Nothing found yet. Start a scan — the Pi searches the ARP table and mDNS.'}
               </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
-                {newDevices.map((dd, i) => {
-                  const unknown = dd.type === 'unknown' || dd.type === 'http';
-                  return (
-                    <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}
-                      style={{ borderColor: `${accent}18` }}>
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xl flex-shrink-0">{deviceTypeIcon(unknown ? 'web' : dd.type)}</span>
-                        <div className="min-w-0">
-                          <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</p>
-                          <p className={`text-xs ${t.muted}`}>
-                            {dd.ip}
-                            {dd.vendor ? <span className="ml-1 rounded px-1 py-0.5" style={{ background: `${accent}1A`, color: accent }}>{dd.vendor}</span> : null}
-                            {' · '}{unknown ? 'unknown' : dd.type}
-                            <span className="ml-1 opacity-60">({dd.via})</span>
-                          </p>
-                        </div>
+                {addable.map((dd, i) => (
+                  <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${t.border}`}
+                    style={{ borderColor: `${accent}18` }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xl flex-shrink-0">{deviceTypeIcon(dd.type === 'http' ? 'web' : dd.type)}</span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</p>
+                        <p className={`text-xs ${t.muted}`}>
+                          {dd.ip}
+                          {dd.vendor ? <span className="ml-1 rounded px-1 py-0.5" style={{ background: `${accent}1A`, color: accent }}>{dd.vendor}</span> : null}
+                          {' · '}{dd.type === 'http' ? 'web' : dd.type}
+                          <span className="ml-1 opacity-60">({dd.via})</span>
+                        </p>
                       </div>
-                      <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
+                    </div>
+                    <Btn accent={accent} size="sm" onClick={() => addDiscovered(dd)}>+ Add</Btn>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Network monitor — every host seen on the LAN, presence only */}
+          <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
+            <div className="flex items-center justify-between">
+              <h2 className={`font-semibold ${t.text}`}>Network monitor</h2>
+              <span className={`text-xs ${t.muted}`}>{discovered.length} host(s) seen</span>
+            </div>
+            <p className={`text-sm ${t.muted}`}>Everything the Pi sees on the local network, whether or not it's a managed device.</p>
+            {loading ? (
+              <Spinner size={20} color={accent} />
+            ) : discovered.length === 0 ? (
+              <p className={`text-sm ${t.muted}`}>No hosts seen yet — run a scan.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {discovered.map((dd, i) => {
+                  const recent = Date.now() - dd.discoveredAt < 5 * 60_000; // seen in the last scan window
+                  return (
+                    <div key={i} className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm ${t.navHover}`}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${recent ? 'bg-green-500' : 'bg-zinc-500/50'}`} />
+                        <span className="text-base flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' || dd.type === 'http' ? 'web' : dd.type)}</span>
+                        <span className={`truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</span>
+                        {dd.configuredDeviceId && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500">managed</span>
+                        )}
+                      </div>
+                      <span className={`flex-shrink-0 font-mono text-xs ${t.muted}`}>
+                        {dd.ip}{dd.vendor ? ` · ${dd.vendor}` : ''}
+                      </span>
                     </div>
                   );
                 })}

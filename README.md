@@ -14,7 +14,7 @@ A self-hosted home dashboard with Passkey authentication, device management, and
    │   • Passkey auth (WebAuthn)      │
    │   • React frontend               │
    │   • Knows ONLY: device name,     │
-   │     type, room, permissions      │
+   │     type, room, tags, groups     │
    │   • NO IPs, MACs, tokens         │
    └──────────────┬───────────────────┘
                   │  Tailnet A (infra)
@@ -43,7 +43,7 @@ A self-hosted home dashboard with Passkey authentication, device management, and
 
 ### Key design decisions
 
-- **Zero-knowledge dashboard.** Hetzner stores only device *metadata* (name, type, room, required permissions). Every sensitive value — IP, MAC, Proxmox token, Tailscale key — lives **only** on the Pi. If Hetzner is ever compromised, the attacker learns device *names and types*, nothing that lets them reach your network.
+- **Zero-knowledge dashboard.** Hetzner stores only device *metadata* (name, type, room, tags) plus access groups. Every sensitive value — IP, MAC, Proxmox token, Tailscale key — lives **only** on the Pi. If Hetzner is ever compromised, the attacker learns device *names and types*, nothing that lets them reach your network.
 - **Auth stays on Hetzner.** The hardened public DMZ handles Passkey login. The Pi is never directly reachable from the internet.
 - **Pi Agent binds to its Tailscale IP only.** Not exposed to the local LAN or the internet.
 - **Two separate Tailnets** (recommended) to limit blast radius — see below.
@@ -73,7 +73,7 @@ The Pi is the only bridge, and only you control Tailnet B. A breach of Hetzner s
 You type in dashboard:  name, type, IP, MAC, token …
         │
         ▼
-Hetzner keeps ONLY:  name, type, room, permissions
+Hetzner keeps ONLY:  name, type, room, tags
         │  forwards the rest over Tailnet A ↓
         ▼
 Pi stores permanently in data/device-configs.json:
@@ -379,23 +379,30 @@ Detects Shelly (`_shelly._tcp` + `/shelly`), Tasmota (`_http._tcp` + `/cm`), Doc
 
 ---
 
-## 7. User Permissions
+## 7. Access control (groups)
 
-**Admin → Users → (select user)**. Per-flag access control:
+Access is **deny-by-default**: a regular `user` (or `readonly`) sees and controls
+**nothing** until an admin puts them in an **access group**.
 
-| Permission | Allows |
-|------------|--------|
-| `control:plugs` | Toggle smart plugs |
-| `control:lights` | Toggle lights |
-| `control:wol` | Send WOL packets |
-| `view:proxmox` / `control:proxmox` | View / start-stop-reboot VMs |
-| `view:rdp` / `view:ssh` | See connection links |
-| `control:http` | Trigger HTTP actions |
-| `control:tasmota` | Control Tasmota devices |
-| `view:docker` / `control:docker` | View / start-stop-restart containers |
-| `view:tailscale` | View Tailscale peers |
+**Admin → Users & Roles → Access groups → + Group**. A group has:
 
-Admins/root bypass all flags.
+- **Members** — the users it applies to
+- **Devices** — specific devices (and/or device **tags**, e.g. `wohnzimmer`) it scopes
+- **Level** — `view` (read status / open links) or `control` (toggle, wake, start/stop)
+
+A device is in a group's scope if the group lists it directly **or** the device carries
+one of the group's tags — so tagging a new light `wohnzimmer` automatically grants it to
+the "Kids → control wohnzimmer" group. A user's effective access is the union of all their
+groups (control wins over view).
+
+| Role | Access |
+|------|--------|
+| `root` / `admin` | Everything, plus device & group management |
+| `user` | Only what their groups grant (view or control) |
+| `readonly` | Same scope as their groups, but **never** control — capped at view |
+
+Mutating actions (on/off, wake, VM/container start-stop) require `control`; the server
+enforces this regardless of what the UI shows.
 
 ---
 
