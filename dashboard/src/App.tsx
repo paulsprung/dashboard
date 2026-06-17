@@ -40,7 +40,6 @@ type Device = {
   id: string; name: string; type: string; room?: string; icon?: string;
   tags?: string[]; // free-form user labels for grouping/filtering + access scoping
   config?: DeviceConfig; // absent in zero-knowledge mode (Pi Agent configured)
-  needsConfig?: boolean; // discovered as 'unknown' — user still has to fill in connection details
   canControl?: boolean; // whether the current user may control (vs only view) this device
 };
 
@@ -55,6 +54,8 @@ type DiscoveredDevice = {
   via: 'arp' | 'mdns';
   discoveredAt: number;
   configuredDeviceId?: string; // set by the Pi when this host already matches a configured device
+  online?: boolean;            // live presence from the Pi's monitor sweep
+  lastSeen?: number;
 };
 
 type AuditEntry = {
@@ -677,8 +678,11 @@ function DeviceForm({
   };
 
   const save = async () => {
-    const config = buildConfig();
-    if (!name || !config) return;
+    const built = buildConfig();
+    if (!name || !built) return;
+    // Preserve a discovered/known MAC (non-WOL types don't surface a MAC field) so the
+    // Pi can keep matching this device in discovery even if its DHCP IP changes.
+    const config = (mac && built.type !== 'wol') ? { ...built, mac } as unknown as DeviceConfig : built;
     setLoading(true);
     await onSave({ name, type: config.type, room: room || undefined, tags, config });
     setLoading(false);
@@ -1053,19 +1057,23 @@ function DeviceToggleWidget({ config, devices, t, accent }: {
         </div>
       )}
       {status && <p className="text-xs text-red-500">{status}</p>}
-      <div className="mt-auto flex gap-2">
-        <button
-          onClick={() => doAction('on')} disabled={loading}
-          className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === true ? 'text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}
-          style={on === true ? { backgroundColor: accent } : {}}>
-          {loading ? <Spinner size={12} /> : 'On'}
-        </button>
-        <button
-          onClick={() => doAction('off')} disabled={loading}
-          className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === false ? 'bg-red-500 text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}>
-          {loading ? <Spinner size={12} /> : 'Off'}
-        </button>
-      </div>
+      {device.canControl === false ? (
+        <p className={`mt-auto text-xs ${t.muted}`}>View only</p>
+      ) : (
+        <div className="mt-auto flex gap-2">
+          <button
+            onClick={() => doAction('on')} disabled={loading}
+            className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === true ? 'text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}
+            style={on === true ? { backgroundColor: accent } : {}}>
+            {loading ? <Spinner size={12} /> : 'On'}
+          </button>
+          <button
+            onClick={() => doAction('off')} disabled={loading}
+            className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${on === false ? 'bg-red-500 text-white shadow-sm' : `border ${t.border} ${t.text} hover:opacity-100 opacity-80`}`}>
+            {loading ? <Spinner size={12} /> : 'Off'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1098,7 +1106,9 @@ function WolButtonWidget({ config, devices, t, accent }: {
     <div className="flex h-full flex-col items-center justify-center gap-3">
       <span className="text-3xl">⚡</span>
       <p className={`text-sm font-medium ${t.text}`}>{config.label ?? device.name}</p>
-      {sent ? (
+      {device.canControl === false ? (
+        <p className={`text-xs ${t.muted}`}>View only</p>
+      ) : sent ? (
         <p className="text-xs text-green-500">Magic Packet gesendet ✓</p>
       ) : (
         <Btn accent={accent} onClick={wake} loading={loading} size="sm">Aufwecken</Btn>
@@ -1231,22 +1241,24 @@ function DockerWidget({ config, devices, t, accent }: {
                   <p className={`text-[10px] truncate ${t.muted}`}>{c.Image?.split(':')[0]}</p>
                 </div>
               </div>
-              <div className="flex gap-1 flex-shrink-0">
-                {running ? (
-                  <button onClick={() => containerAction(c.Id, 'stop')} disabled={acting === c.Id}
-                    className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
-                    {acting === c.Id ? '…' : 'Stop'}
-                  </button>
-                ) : (
-                  <button onClick={() => containerAction(c.Id, 'start')} disabled={acting === c.Id}
-                    className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all ${t.inputBg}`}
-                    style={{ color: accent }}>
-                    {acting === c.Id ? '…' : 'Start'}
-                  </button>
-                )}
-                <button onClick={() => containerAction(c.Id, 'restart')} disabled={acting === c.Id}
-                  className={`rounded-lg px-2 py-1 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-60`}>↺</button>
-              </div>
+              {device.canControl !== false && (
+                <div className="flex gap-1 flex-shrink-0">
+                  {running ? (
+                    <button onClick={() => containerAction(c.Id, 'stop')} disabled={acting === c.Id}
+                      className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
+                      {acting === c.Id ? '…' : 'Stop'}
+                    </button>
+                  ) : (
+                    <button onClick={() => containerAction(c.Id, 'start')} disabled={acting === c.Id}
+                      className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-all ${t.inputBg}`}
+                      style={{ color: accent }}>
+                      {acting === c.Id ? '…' : 'Start'}
+                    </button>
+                  )}
+                  <button onClick={() => containerAction(c.Id, 'restart')} disabled={acting === c.Id}
+                    className={`rounded-lg px-2 py-1 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-60`}>↺</button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1429,23 +1441,25 @@ function ProxmoxVmsWidget({ config, devices, t, accent }: {
                   <p className={`truncate text-xs font-medium ${t.text}`}>{vm.name ?? `${kind === 'lxc' ? 'CT' : 'VM'} ${vm.vmid}`}</p>
                   <span className={`shrink-0 text-[10px] ${t.muted}`}>#{vm.vmid}</span>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  {running ? (
-                    <>
-                      <button onClick={() => vmAction(vm.vmid, 'shutdown', kind)} disabled={acting === vm.vmid}
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
-                        {acting === vm.vmid ? '…' : 'Stop'}
+                {device.canControl !== false && (
+                  <div className="flex shrink-0 gap-1">
+                    {running ? (
+                      <>
+                        <button onClick={() => vmAction(vm.vmid, 'shutdown', kind)} disabled={acting === vm.vmid}
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium text-red-400 ${t.inputBg} hover:bg-red-500/20`}>
+                          {acting === vm.vmid ? '…' : 'Stop'}
+                        </button>
+                        <button onClick={() => vmAction(vm.vmid, 'reboot', kind)} disabled={acting === vm.vmid}
+                          className={`rounded px-1.5 py-0.5 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-70`}>↺</button>
+                      </>
+                    ) : (
+                      <button onClick={() => vmAction(vm.vmid, 'start', kind)} disabled={acting === vm.vmid}
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.inputBg}`} style={{ color: accent }}>
+                        {acting === vm.vmid ? '…' : 'Start'}
                       </button>
-                      <button onClick={() => vmAction(vm.vmid, 'reboot', kind)} disabled={acting === vm.vmid}
-                        className={`rounded px-1.5 py-0.5 text-[10px] ${t.muted} ${t.inputBg} hover:opacity-100 opacity-70`}>↺</button>
-                    </>
-                  ) : (
-                    <button onClick={() => vmAction(vm.vmid, 'start', kind)} disabled={acting === vm.vmid}
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.inputBg}`} style={{ color: accent }}>
-                      {acting === vm.vmid ? '…' : 'Start'}
-                    </button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
               {(cpu || mem) && (
                 <div className="flex gap-3">
@@ -1996,7 +2010,9 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
   const newDiscovered = discovered.filter((dd) => !dd.configuredDeviceId && dd.type !== 'unknown');
   const addDiscovered = (dd: DiscoveredDevice) => {
     const type = dd.type === 'http' ? 'web' : dd.type;
-    setPrefill({ name: dd.hostname || dd.vendor || `${type} ${dd.ip}`, type, config: { type, ip: dd.ip } as DeviceConfig });
+    // Carry the MAC into the prefill so it's stored on the Pi for DHCP-proof dedup.
+    const config = { type, ip: dd.ip, ...(dd.mac ? { mac: dd.mac } : {}) } as DeviceConfig;
+    setPrefill({ name: dd.hostname || dd.vendor || `${type} ${dd.ip}`, type, config });
     setShowDeviceForm(true); setEditDevice(null);
   };
 
@@ -2052,12 +2068,7 @@ function DeviceManager({ devices, setDevices, t, accent, s }: {
             <div className="flex items-center gap-3">
               <span className="text-xl">{d.icon ?? deviceTypeIcon(d.type)}</span>
               <div>
-                <p className={`text-sm font-medium ${t.text} flex items-center gap-2`}>
-                  {d.name}
-                  {d.needsConfig && (
-                    <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500">setup needed</span>
-                  )}
-                </p>
+                <p className={`text-sm font-medium ${t.text}`}>{d.name}</p>
                 <p className={`text-xs ${t.muted}`}>{d.room ? `${d.room} · ` : ''}{DEVICE_TYPE_OPTIONS.find((o) => o.value === d.type)?.label.replace(/^\S+\s/, '') ?? d.type}</p>
                 {d.tags && d.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
@@ -2846,7 +2857,11 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   const [piLog, setPiLog] = useState<AuditEntry[]>([]);
   const [piLogLoading, setPiLogLoading] = useState(false);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const i = setInterval(() => { void load(); }, 60_000); // keep the presence monitor fresh
+    return () => clearInterval(i);
+  }, []);
 
   const togglePiDetails = async () => {
     const next = !piExpanded;
@@ -2895,13 +2910,14 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
   // and hidden here. Only recognised device types can be added directly; unidentified
   // hosts still show up below in the network monitor (presence only, not addable).
   const newDevices = discovered.filter((dd) => !dd.configuredDeviceId);
-  const addable = newDevices.filter((dd) => dd.type !== 'unknown');
+  const addable = newDevices.filter((dd) => dd.type !== 'unknown' && dd.online !== false);
 
   const addDiscovered = async (dd: DiscoveredDevice) => {
     // Generic HTTP services are opened as a "web" device; everything else keeps its
-    // fingerprinted type, icon and hostname.
+    // fingerprinted type, icon and hostname. The MAC rides along to the Pi so future
+    // discovery dedup survives DHCP IP changes (it's never stored on the dashboard).
     const type = dd.type === 'http' ? 'web' : dd.type;
-    const config: DeviceConfig = { type, ip: dd.ip } as DeviceConfig;
+    const config = { type, ip: dd.ip, ...(dd.mac ? { mac: dd.mac } : {}) } as DeviceConfig;
     const r = await fetch('/api/devices', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({
@@ -3094,9 +3110,11 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
           <section className={`${s.glassSubtle} rounded-[22px] p-5 space-y-3`} style={{ boxShadow: s.cardShadow }}>
             <div className="flex items-center justify-between">
               <h2 className={`font-semibold ${t.text}`}>Network monitor</h2>
-              <span className={`text-xs ${t.muted}`}>{discovered.length} host(s) seen</span>
+              <span className={`text-xs ${t.muted}`}>
+                {discovered.filter((d) => d.online !== false).length} online · {discovered.length} known
+              </span>
             </div>
-            <p className={`text-sm ${t.muted}`}>Everything the Pi sees on the local network, whether or not it's a managed device.</p>
+            <p className={`text-sm ${t.muted}`}>Every host the Pi sees on the LAN. Presence refreshes automatically every ~90s.</p>
             {loading ? (
               <Spinner size={20} color={accent} />
             ) : discovered.length === 0 ? (
@@ -3104,19 +3122,21 @@ function DiscoveryTab({ devices, setDevices, t, accent, s }: {
             ) : (
               <div className="space-y-1.5">
                 {discovered.map((dd, i) => {
-                  const recent = Date.now() - dd.discoveredAt < 5 * 60_000; // seen in the last scan window
+                  const online = dd.online !== false;
                   return (
                     <div key={i} className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm ${t.navHover}`}>
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${recent ? 'bg-green-500' : 'bg-zinc-500/50'}`} />
+                        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${online ? 'bg-green-500' : 'bg-zinc-500/50'}`}
+                          style={online ? { animation: 'pulse 2.4s ease-in-out infinite' } : undefined} />
                         <span className="text-base flex-shrink-0">{deviceTypeIcon(dd.type === 'unknown' || dd.type === 'http' ? 'web' : dd.type)}</span>
-                        <span className={`truncate ${t.text}`}>{dd.hostname || dd.vendor || dd.ip}</span>
+                        <span className={`truncate ${online ? t.text : t.muted}`}>{dd.hostname || dd.vendor || dd.ip}</span>
                         {dd.configuredDeviceId && (
                           <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500">managed</span>
                         )}
                       </div>
                       <span className={`flex-shrink-0 font-mono text-xs ${t.muted}`}>
-                        {dd.ip}{dd.vendor ? ` · ${dd.vendor}` : ''}
+                        {online ? dd.ip : (dd.lastSeen ? `last seen ${new Date(dd.lastSeen).toLocaleTimeString()}` : 'offline')}
+                        {dd.vendor && online ? ` · ${dd.vendor}` : ''}
                       </span>
                     </div>
                   );

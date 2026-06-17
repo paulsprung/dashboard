@@ -11,9 +11,16 @@ export type DiscoveredDevice = {
   info?: Record<string, unknown>;
   discoveredAt: number;
   via: 'arp' | 'mdns';
+  firstSeen?: number;
+  lastSeen?: number;
+  online?: boolean;
 };
 
-let lastResults: DiscoveredDevice[] = [];
+// Persistent registry of every host ever seen on the LAN, keyed by MAC (stable) or IP.
+// Full discovery refreshes fingerprints; the lightweight monitor sweep just refreshes
+// online/last-seen so the dashboard can show a real presence monitor between scans.
+const hostRegistry = new Map<string, DiscoveredDevice>();
+const hostKey = (d: { mac?: string; ip: string }) => d.mac?.toLowerCase() || d.ip;
 const mdnsCache = new Map<string, { hostname: string; type: DiscoveredDevice['type'] }>();
 
 // ── MAC vendor (OUI) lookup ────────────────────────────────────────────────────
@@ -240,10 +247,69 @@ export async function runDiscovery(subnet?: string): Promise<DiscoveredDevice[]>
     }
   }
 
-  lastResults = results;
-  return results;
+  mergeIntoRegistry(results, true);
+  return getLastResults();
+}
+
+// Fold a set of freshly-seen hosts into the persistent registry. Hosts present in this
+// pass are marked online; hosts absent from a *full* scan are marked offline (the
+// lightweight monitor sweep only flips hosts it can confirm, never the whole registry).
+function mergeIntoRegistry(results: DiscoveredDevice[], fullScan: boolean) {
+  const now = Date.now();
+  const seen = new Set<string>();
+  for (const r of results) {
+    const key = hostKey(r);
+    seen.add(key);
+    const prev = hostRegistry.get(key);
+    hostRegistry.set(key, {
+      ...prev,
+      ...r,
+      // keep the most informative type/hostname/vendor we've ever learned for this host
+      type: r.type !== 'unknown' ? r.type : (prev?.type ?? r.type),
+      hostname: r.hostname ?? prev?.hostname,
+      vendor: r.vendor ?? prev?.vendor,
+      firstSeen: prev?.firstSeen ?? now,
+      lastSeen: now,
+      online: true,
+    });
+  }
+  if (fullScan) {
+    for (const [key, h] of hostRegistry) {
+      if (!seen.has(key)) hostRegistry.set(key, { ...h, online: false });
+    }
+  }
+}
+
+// Lightweight presence check between full scans: touch the subnet, re-read the ARP table
+// (an entry means the host answered at L2) and update online/last-seen accordingly.
+export async function monitorSweep(subnet?: string): Promise<void> {
+  await sweepSubnet(subnet);
+  const arp = await readArpTable();
+  const now = Date.now();
+  const live = new Map(arp.map((a) => [a.ip, a.mac] as const));
+
+  for (const [key, h] of hostRegistry) {
+    const online = live.has(h.ip);
+    hostRegistry.set(key, { ...h, online, lastSeen: online ? now : h.lastSeen });
+  }
+  // Register ARP hosts we hadn't catalogued yet (unfingerprinted, but present).
+  for (const { ip, mac } of arp) {
+    const key = mac.toLowerCase();
+    const known = hostRegistry.has(key) || [...hostRegistry.values()].some((h) => h.ip === ip);
+    if (!known) {
+      hostRegistry.set(key, {
+        ip, mac, vendor: ouiVendor(mac), type: 'unknown', via: 'arp',
+        discoveredAt: now, firstSeen: now, lastSeen: now, online: true,
+      });
+    }
+  }
 }
 
 export function getLastResults(): DiscoveredDevice[] {
-  return lastResults;
+  return [...hostRegistry.values()].sort((a, b) => {
+    const na = a.ip.split('.').map(Number);
+    const nb = b.ip.split('.').map(Number);
+    for (let i = 0; i < 4; i++) if ((na[i] ?? 0) !== (nb[i] ?? 0)) return (na[i] ?? 0) - (nb[i] ?? 0);
+    return 0;
+  });
 }

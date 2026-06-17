@@ -4,7 +4,7 @@ import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import express from 'express';
-import { startMdnsListener, runDiscovery, getLastResults } from './discovery.js';
+import { startMdnsListener, runDiscovery, getLastResults, monitorSweep } from './discovery.js';
 import { executeDeviceAction } from './proxy.js';
 import type { DeviceConfig } from './proxy.js';
 import { logEvent, getRecent, type AuditKind } from './audit.js';
@@ -376,4 +376,6 @@ app.listen(port, bindHost, () => {
       console.log(`Initial discovery: ${r.length} devices found`),
     );
   }, 10_000);
+  // Keep a live presence picture between full scans (cheap ARP-based sweep).
+  setInterval(() => { void monitorSweep(process.env.LOCAL_SUBNET).catch(() => {}); }, 90_000);
 });
