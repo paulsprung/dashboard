@@ -109,7 +109,7 @@ The Pi keeps the detailed internal trail (which IP was contacted, status code, l
 |--------|---------|---------|
 | `dashboard/` | Hetzner VPS | Web UI + API + auth. Stores device metadata only. |
 | `pi-agent/` | Raspberry Pi | Stores secrets, executes commands, discovery, health checks, audit log |
-| `host-agent/` | Any server (Proxmox, Docker…) | Auto-reports its current IP to the Pi Agent |
+| `host-agent/` | Any server (Proxmox, Docker…) | Auto-reports its IP **and live metrics** (CPU/RAM/temp/disk) to the Pi Agent |
 
 ---
 
@@ -426,6 +426,15 @@ knows the IPs). The dashboard pulls the aggregated result every 30s via `GET /de
 
 Shown on device cards and the **Service Monitor** widget. In legacy mode (no Pi Agent),
 the dashboard runs the checks itself.
+
+### Device overview (click a device)
+
+Click a device's name to open its overview: live **status**, **uptime %** and a **latency
+trend** over the last checks, this device's **recent activity**, and quick actions. If the
+machine runs the **host agent**, the overview also shows its live **CPU / RAM / temperature /
+disk** plus trend charts — the same view as the Pi tab, for any of your servers. The Pi
+correlates a device to its host agent by IP (which only the Pi knows); the dashboard never
+sees IPs.
 
 ---
 

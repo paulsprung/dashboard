@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
 import { createConnection } from 'node:net';
+import { getMetrics } from './metrics.js';
 
 const PI_AGENT_URL = process.env.PI_AGENT_URL ?? '';
 const AGENT_SECRET = process.env.AGENT_SECRET ?? '';
@@ -206,6 +207,7 @@ async function register(): Promise<void> {
     ip: state.ip,
     tailscaleIp: state.tailscaleIp,
     services: servicesList(state.services),
+    metrics: getMetrics(),
   });
   console.log(`[host-agent] Registered as "${state.hostname}" (${state.ip}${state.tailscaleIp ? `, ts: ${state.tailscaleIp}` : ''})`);
   if (state.services.hasDocker) console.log(`[host-agent]   Docker${state.services.dockerVersion ? ` v${state.services.dockerVersion}` : ''}`);
@@ -222,7 +224,7 @@ async function heartbeat(): Promise<void> {
     return;
   }
 
-  await agentPost('/agents/heartbeat', { hostname: AGENT_HOSTNAME, ip: primaryIp, tailscaleIp });
+  await agentPost('/agents/heartbeat', { hostname: AGENT_HOSTNAME, ip: primaryIp, tailscaleIp, metrics: getMetrics() });
 }
 
 async function main() {

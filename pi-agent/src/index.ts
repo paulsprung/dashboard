@@ -79,11 +79,31 @@ app.use((req, res, next) => {
 
 // ── Registered host agents ────────────────────────────────────────────────────
 
+type AgentMetrics = Record<string, number | string | null>;
 type HostAgent = {
   id: string; hostname: string; ip: string; tailscaleIp?: string;
   os?: string; services: string[]; registeredAt: number; lastSeen: number;
+  metrics?: AgentMetrics; metricsAt?: number;
 };
 const hostAgents = new Map<string, HostAgent>();
+// Per-agent rolling metric history for the device overview trend charts.
+const agentHistory = new Map<string, MetricSample[]>();
+const AGENT_HISTORY_MAX = 240;
+
+const recordAgentMetrics = (id: string, m: AgentMetrics | undefined) => {
+  if (!m) return;
+  const arr = agentHistory.get(id) ?? [];
+  arr.push({
+    ts: Date.now(),
+    cpuPct: Number(m.cpuPct) || 0,
+    memPct: Number(m.memPct) || 0,
+    tempC: m.tempC == null ? null : Number(m.tempC),
+    diskPct: m.diskPct == null ? null : Number(m.diskPct),
+    load1: Number(m.load1) || 0,
+  });
+  if (arr.length > AGENT_HISTORY_MAX) arr.splice(0, arr.length - AGENT_HISTORY_MAX);
+  agentHistory.set(id, arr);
+};
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
@@ -249,6 +269,7 @@ app.delete('/devices/config/:id', (req, res) => {
   const existed = deviceConfigs.get(req.params.id);
   deviceConfigs.delete(req.params.id);
   monitorStatuses.delete(req.params.id);
+  monitorHistory.delete(req.params.id);
   forgetDevice(req.params.id);
   saveConfigs();
   logEvent({ kind: 'config_delete', ok: true, deviceId: req.params.id, deviceType: existed?.type });
@@ -259,6 +280,10 @@ app.delete('/devices/config/:id', (req, res) => {
 
 type MonitorStatus = { deviceId: string; online: boolean; latencyMs: number | null; lastCheck: number };
 const monitorStatuses = new Map<string, MonitorStatus>();
+// Per-device reachability history for the device overview (uptime + latency sparkline).
+type MonitorSample = { ts: number; online: boolean; latencyMs: number | null };
+const monitorHistory = new Map<string, MonitorSample[]>();
+const MONITOR_HISTORY_MAX = 240;
 
 const checkTcp = (host: string, port: number, timeoutMs = 2500): Promise<number | null> =>
   new Promise((resolve) => {
@@ -291,6 +316,10 @@ const runMonitorChecks = async () => {
     const latency = await checkTcp(target.host, target.port);
     const online = latency !== null;
     monitorStatuses.set(cfg.id, { deviceId: cfg.id, online, latencyMs: latency, lastCheck: Date.now() });
+    const hist = monitorHistory.get(cfg.id) ?? [];
+    hist.push({ ts: Date.now(), online, latencyMs: latency });
+    if (hist.length > MONITOR_HISTORY_MAX) hist.splice(0, hist.length - MONITOR_HISTORY_MAX);
+    monitorHistory.set(cfg.id, hist);
     evaluateDeviceState(cfg.id, cfg.name ?? cfg.type, online);
   });
   await Promise.allSettled(promises);
@@ -301,6 +330,35 @@ setInterval(() => void runMonitorChecks(), 30_000);
 
 app.get('/devices/monitor', (_req, res) => {
   res.json([...monitorStatuses.values()]);
+});
+
+// Aggregated detail for one device — status + reachability history, the matching
+// host agent's live metrics + trend (correlated by IP, which only the Pi knows),
+// and this device's recent activity. Powers the dashboard's device overview.
+app.get('/devices/:id/overview', (req, res) => {
+  const id = req.params.id;
+  const cfg = deviceConfigs.get(id);
+  const ip = (cfg as { ip?: string } | undefined)?.ip;
+  let agent: (HostAgent & { online: boolean }) | null = null;
+  let history: MetricSample[] = [];
+  if (ip) {
+    for (const a of hostAgents.values()) {
+      if (a.ip === ip || a.tailscaleIp === ip) {
+        agent = { ...a, online: Date.now() - a.lastSeen < 90_000 };
+        history = agentHistory.get(a.id) ?? [];
+        break;
+      }
+    }
+  }
+  const audit = getRecent(800).filter((e) => e.deviceId === id).slice(0, 40);
+  res.json({
+    status: monitorStatuses.get(id) ?? null,
+    statusHistory: monitorHistory.get(id) ?? [],
+    agent,
+    history,
+    audit,
+    hasConfig: !!cfg,
+  });
 });
 
 // ── Proxy: execute device action ──────────────────────────────────────────────
@@ -397,7 +455,7 @@ app.get('/discover/results', (_req, res) => {
 // ── Host agents ───────────────────────────────────────────────────────────────
 
 app.post('/agents/register', (req, res) => {
-  const { hostname, ip, tailscaleIp, os, services } = req.body as Partial<HostAgent>;
+  const { hostname, ip, tailscaleIp, os, services, metrics } = req.body as Partial<HostAgent>;
   if (!hostname || !ip) return res.status(400).json({ error: 'hostname and ip are required' });
   const id = hostname.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const existing = hostAgents.get(id);
@@ -406,14 +464,17 @@ app.post('/agents/register', (req, res) => {
     services: (services as unknown as string[]) ?? [],
     registeredAt: existing?.registeredAt ?? Date.now(),
     lastSeen: Date.now(),
+    metrics: metrics ?? existing?.metrics,
+    metricsAt: metrics ? Date.now() : existing?.metricsAt,
   };
   hostAgents.set(id, agent);
+  recordAgentMetrics(id, metrics);
   logEvent({ kind: 'agent_register', ok: true, target: `${hostname} (${ip})`, message: agent.services.length ? `services: ${agent.services.join(', ')}` : undefined });
   return res.json({ ok: true, id });
 });
 
 app.post('/agents/heartbeat', (req, res) => {
-  const { hostname, ip, tailscaleIp } = req.body as { hostname?: string; ip?: string; tailscaleIp?: string };
+  const { hostname, ip, tailscaleIp, metrics } = req.body as { hostname?: string; ip?: string; tailscaleIp?: string; metrics?: AgentMetrics };
   if (!hostname) return res.status(400).json({ error: 'hostname is required' });
   const id = hostname.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const agent = hostAgents.get(id);
@@ -425,6 +486,7 @@ app.post('/agents/heartbeat', (req, res) => {
   agent.lastSeen = Date.now();
   if (ip) agent.ip = ip;
   if (tailscaleIp !== undefined) agent.tailscaleIp = tailscaleIp;
+  if (metrics) { agent.metrics = metrics; agent.metricsAt = Date.now(); recordAgentMetrics(id, metrics); }
   return res.json({ ok: true });
 });
 

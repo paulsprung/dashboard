@@ -2484,6 +2484,7 @@ const ACCESSIBLE_TYPES = new Set(['proxmox', 'web', 'http', 'docker', 'rdp', 'ss
 function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devices: Device[]; t: ReturnType<typeof tok>; accent: string; statuses: Record<string, MonitorStatus>; s: ShellTokens; cardSize: CardSize; user: SessionUser }) {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [overviewDevice, setOverviewDevice] = useState<Device | null>(null);
   const cs = CARD_SIZE_CONFIG[cardSize];
   const allTags = [...new Set(devices.flatMap((d) => d.tags ?? []))].sort();
 
@@ -2647,7 +2648,9 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
 
                   {/* Name + type */}
                   <div className="mb-4">
-                    <p className={`${cs.name} font-semibold leading-tight`} style={{ color: s.fg }}>{device.name}</p>
+                    <button onClick={() => setOverviewDevice(device)} className="text-left group/name">
+                      <p className={`${cs.name} font-semibold leading-tight group-hover/name:underline`} style={{ color: s.fg }}>{device.name}</p>
+                    </button>
                     <p className="text-[12px] mt-1" style={{ color: s.fgMuted }}>{DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}</p>
                     {device.tags && device.tags.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -2743,6 +2746,185 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
           </div>
         </div>
       ))}
+      {overviewDevice && (
+        <DeviceOverview device={overviewDevice} status={statuses[overviewDevice.id]} doAction={doAction}
+          onClose={() => setOverviewDevice(null)} t={t} accent={accent} s={s} />
+      )}
+    </div>
+  );
+}
+
+// ── Device overview (drill-down) ──────────────────────────────────────────────
+// Opens from a device card. Shows live status + reachability history, the matching
+// host agent's metrics + trends (if one is installed on that machine), and recent
+// activity. The Pi correlates device↔agent by IP; the dashboard never sees IPs.
+type OverviewData = {
+  status: MonitorStatus | null;
+  statusHistory: { ts: number; online: boolean; latencyMs: number | null }[];
+  agent: (HostAgentInfo & { metrics?: PiMetrics | null }) | null;
+  history: MetricSample[];
+  audit: AuditEntry[];
+  hasConfig: boolean;
+  piAgent: boolean;
+};
+
+function DeviceOverview({ device, status, doAction, onClose, t, accent, s }: {
+  device: Device; status?: MonitorStatus; doAction: (d: Device, a: string) => void;
+  onClose: () => void; t: ReturnType<typeof tok>; accent: string; s: ShellTokens;
+}) {
+  const [data, setData] = useState<OverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    try {
+      const r = await fetch(`/api/devices/${device.id}/overview`, { credentials: 'include' });
+      if (r.ok) setData(await r.json() as OverviewData);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => {
+    void load();
+    const i = setInterval(() => { void load(); }, 15_000);
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onEsc);
+    return () => { clearInterval(i); window.removeEventListener('keydown', onEsc); };
+  }, [device.id]);
+
+  const m = data?.agent?.metrics;
+  const sh = data?.statusHistory ?? [];
+  const onlinePct = sh.length ? Math.round((sh.filter((x) => x.online).length / sh.length) * 100) : null;
+  const latencies = sh.map((x) => x.latencyMs).filter((n): n is number => n != null);
+  const st = data?.status ?? status;
+
+  const metricCards = m ? [
+    { label: 'CPU', value: `${m.cpuPct}%`, sub: `load ${m.load1} · ${m.cpus} cores`, pct: m.cpuPct, color: '#0A84FF' },
+    { label: 'RAM', value: `${m.memPct}%`, sub: `${fmtGB(m.memUsed)} / ${fmtGB(m.memTotal)}`, pct: m.memPct, color: '#30D158' },
+    { label: 'Temp', value: m.tempC != null ? `${m.tempC}°C` : '–', sub: 'CPU package', pct: m.tempC != null ? Math.min(100, Math.round((m.tempC / 85) * 100)) : null, color: '#FF9F0A' },
+    { label: 'Disk', value: m.diskPct != null ? `${m.diskPct}%` : '–', sub: `${fmtGB(m.diskUsed)} / ${fmtGB(m.diskTotal)}`, pct: m.diskPct, color: '#BF5AF2' },
+  ] : [];
+  const trends = m ? [
+    { label: 'CPU', color: '#0A84FF', unit: '%', max: 100, pick: (x: MetricSample) => x.cpuPct },
+    { label: 'Temperature', color: '#FF9F0A', unit: '°C', max: 90, pick: (x: MetricSample) => x.tempC ?? NaN },
+    { label: 'RAM', color: '#30D158', unit: '%', max: 100, pick: (x: MetricSample) => x.memPct },
+    { label: 'Disk', color: '#BF5AF2', unit: '%', max: 100, pick: (x: MetricSample) => x.diskPct ?? NaN },
+  ] : [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 backdrop-blur-sm p-4 sm:p-8 animate-fade-in"
+      onClick={onClose}>
+      <div className={`${s.glass} w-full max-w-2xl rounded-[26px] p-6 my-auto max-h-[88vh] overflow-y-auto`} style={{ boxShadow: s.cardShadow }}
+        onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl shrink-0"
+              style={{ background: `linear-gradient(145deg, ${accent}38, ${accent}1C)`, border: `1px solid ${accent}2E` }}>
+              {device.icon ?? deviceTypeIcon(device.type)}
+            </div>
+            <div>
+              <h2 className={`text-lg font-semibold ${t.text}`}>{device.name}</h2>
+              <p className={`text-sm ${t.muted}`}>
+                {DEVICE_TYPE_OPTIONS.find((o) => o.value === device.type)?.label.replace(/^\S+\s/, '')}
+                {device.room ? ` · ${device.room}` : ''}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className={`rounded-lg px-2 py-1 text-sm ${t.inputBg} ${t.muted} hover:opacity-100 opacity-70`}>✕</button>
+        </div>
+
+        {/* Status + reachability */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className={`${s.glassSubtle} rounded-2xl p-3.5`}>
+            <p className={`text-[11px] uppercase tracking-wide ${t.muted}`}>Status</p>
+            <p className="mt-1 text-lg font-semibold" style={{ color: st?.online ? '#30D158' : st ? '#FF453A' : undefined }}>
+              {st ? (st.online ? 'Online' : 'Offline') : '–'}
+            </p>
+            <p className={`text-xs ${t.muted}`}>{st?.online && st.latencyMs != null ? `${st.latencyMs} ms` : 'no monitor'}</p>
+          </div>
+          <div className={`${s.glassSubtle} rounded-2xl p-3.5`}>
+            <p className={`text-[11px] uppercase tracking-wide ${t.muted}`}>Uptime</p>
+            <p className={`mt-1 text-lg font-semibold ${t.text}`}>{onlinePct != null ? `${onlinePct}%` : '–'}</p>
+            <p className={`text-xs ${t.muted}`}>last {sh.length} checks</p>
+          </div>
+          <div className={`${s.glassSubtle} rounded-2xl p-3.5`}>
+            <p className={`text-[11px] uppercase tracking-wide ${t.muted}`}>Latency</p>
+            <div className="mt-1">{latencies.length >= 2 ? <MiniChart data={latencies} color={accent} height={34} /> : <p className={`text-lg font-semibold ${t.text}`}>{st?.latencyMs != null ? `${st.latencyMs} ms` : '–'}</p>}</div>
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        {device.canControl !== false && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {(device.type === 'shelly_plug' || device.type === 'shelly_light' || device.type === 'http' || device.type === 'tasmota' || device.type === 'hue') && (<>
+              <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>
+              <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>
+            </>)}
+            {device.type === 'wol' && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'wake')}>⚡ Wake</Btn>}
+            {device.type === 'web' && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'open')}>🌐 Open</Btn>}
+            {(device.type === 'rdp' || device.type === 'ssh') && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'connect')}>🔗 Connect</Btn>}
+          </div>
+        )}
+
+        {/* Host metrics (if an agent is installed on this machine) */}
+        {m ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {metricCards.map((c) => (
+                <div key={c.label} className={`${s.glassSubtle} rounded-2xl p-3.5`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[11px] uppercase tracking-wide ${t.muted}`}>{c.label}</span>
+                    <span className="text-sm font-bold" style={{ color: c.color }}>{c.value}</span>
+                  </div>
+                  <p className={`mt-0.5 text-[11px] ${t.muted} truncate`}>{c.sub}</p>
+                  {c.pct != null && (
+                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: `${c.color}22` }}>
+                      <div className="h-full rounded-full" style={{ width: `${c.pct}%`, background: c.color }} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {trends.map((tr) => {
+                const series = (data?.history ?? []).map(tr.pick);
+                return (
+                  <div key={tr.label} className={`${s.glassSubtle} rounded-2xl p-3`}>
+                    <p className={`mb-1 text-xs font-medium ${t.muted}`}>{tr.label}</p>
+                    <MiniChart data={series} color={tr.color} unit={tr.unit} max={tr.max} height={48} />
+                  </div>
+                );
+              })}
+            </div>
+            <p className={`text-[11px] ${t.muted}`}>
+              Metrics from host agent on <span className="font-medium">{data?.agent?.hostname}</span>
+              {m.kernel ? ` · ${m.platform}/${m.arch} · ${m.kernel}` : ''}
+            </p>
+          </div>
+        ) : (
+          <div className={`${s.glassSubtle} rounded-2xl p-4 text-sm ${t.muted}`}>
+            No live metrics for this device. {data?.hasConfig !== false && ['proxmox', 'docker', 'ssh', 'rdp', 'web'].includes(device.type)
+              ? 'Install the host agent on this machine to see CPU, RAM, temperature and disk here.'
+              : 'Metrics are available for machines running the host agent.'}
+          </div>
+        )}
+
+        {/* Recent activity */}
+        {(data?.audit?.length ?? 0) > 0 && (
+          <div className="mt-5">
+            <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${t.muted}`}>Recent activity</p>
+            <div className="space-y-1.5 max-h-44 overflow-y-auto">
+              {data!.audit.map((e, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: e.ok ? '#30D158' : '#FF453A' }} />
+                  <span className={`${t.muted} tabular-nums shrink-0`}>{new Date(e.ts).toLocaleTimeString()}</span>
+                  <span className={`${t.text} truncate`}>{auditKindLabel(e.kind)}{e.action ? ` · ${e.action}` : ''}{e.message ? ` — ${e.message}` : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {loading && !data && <p className={`text-sm ${t.muted}`}>Loading…</p>}
+      </div>
     </div>
   );
 }

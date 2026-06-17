@@ -1058,6 +1058,25 @@ app.delete('/api/devices/:id', async (req, res) => {
   return res.json({ ok: true });
 });
 
+// Read-only detail for a device: status history, matched host-agent metrics + trend,
+// and recent activity. Requires at least view access. The Pi does the IP correlation.
+app.get('/api/devices/:id/overview', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const device = devices.get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  const userId = Buffer.from(user.id).toString('base64url');
+  if (deviceAccessLevel(userId, user.role, device) === 'none') return res.status(403).json({ error: 'Permission denied' });
+  if (!hasPiAgent()) return res.json({ status: null, statusHistory: [], agent: null, history: [], audit: [], hasConfig: !!device.config, piAgent: false });
+  try {
+    const r = await piAgentFetch(`/devices/${req.params.id}/overview`);
+    if (!r.ok) return res.status(502).json({ error: 'Pi Agent error' });
+    return res.json({ ...(await r.json() as object), piAgent: true });
+  } catch {
+    return res.status(502).json({ error: 'Pi Agent unreachable' });
+  }
+});
+
 app.post('/api/devices/:id/action', async (req, res) => {
   const user = getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
