@@ -1,5 +1,6 @@
 import dgram from 'node:dgram';
 import httpsModule from 'node:https';
+import { hueAction } from './hue.js';
 
 // ── Types (mirrors dashboard DeviceConfig) ───────────────────────────────────
 
@@ -14,6 +15,7 @@ export type DeviceConfig =
   | { type: 'web';          ip: string; port?: number; scheme?: 'http' | 'https'; path?: string }
   | { type: 'tasmota';      ip: string; channels?: number }
   | { type: 'docker';       ip: string; port?: number }
+  | { type: 'hue';          ip: string; apiKey: string; target?: string }
   | { type: 'tailscale';    apiKey: string; tailnet: string };
 
 // ── WOL ──────────────────────────────────────────────────────────────────────
@@ -124,6 +126,10 @@ export async function executeDeviceAction(
       return { ok: r.ok, status: r.status };
     }
     throw new Error('Use action=list_containers or action=container_ctrl');
+  }
+
+  if (config.type === 'hue') {
+    return hueAction(config.ip, config.apiKey, config.target ?? 'group:0', action, params);
   }
 
   if (config.type === 'tailscale') {

@@ -124,10 +124,12 @@ type WebConfig          = { type: 'web'; ip: string; port?: number; scheme?: 'ht
 type TasmotaConfig      = { type: 'tasmota'; ip: string; channels?: number };
 // Docker: remote daemon via TCP (enable with dockerd -H tcp://0.0.0.0:2375)
 type DockerConfig       = { type: 'docker'; ip: string; port?: number };
+// Hue: Philips Hue bridge (local API v1). target = "group:<id>" (group:0 = all) or "light:<id>"
+type HueConfig          = { type: 'hue'; ip: string; apiKey: string; target?: string };
 // Tailscale: uses official Tailscale API
 type TailscaleConfig    = { type: 'tailscale'; apiKey: string; tailnet: string };
 
-type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | WebConfig | TasmotaConfig | DockerConfig | TailscaleConfig;
+type DeviceConfig = ShellyPlugConfig | ShellyLightConfig | WolConfig | ProxmoxConfig | RdpConfig | SshConfig | HttpConfig | WebConfig | TasmotaConfig | DockerConfig | HueConfig | TailscaleConfig;
 
 type DeviceType = DeviceConfig['type'];
 
@@ -1184,6 +1186,24 @@ app.post('/api/devices/:id/action', async (req, res) => {
       return res.status(400).json({ error: 'Use list_containers or containerId+containerAction' });
     }
 
+    if (cfg.type === 'hue') {
+      const base = `http://${cfg.ip}/api/${cfg.apiKey}`;
+      const [kind, id] = (cfg.target ?? 'group:0').split(':');
+      const isGroup = kind !== 'light';
+      const readPath = isGroup ? `${base}/groups/${id}` : `${base}/lights/${id}`;
+      const writePath = isGroup ? `${base}/groups/${id}/action` : `${base}/lights/${id}/state`;
+      if (action === 'status') { const r = await fetch(readPath); return res.json(await r.json()); }
+      let on: boolean;
+      if (action === 'on') on = true;
+      else if (action === 'off') on = false;
+      else if (action === 'toggle') {
+        const cur = await (await fetch(readPath)).json() as { state?: { any_on?: boolean; on?: boolean }; action?: { on?: boolean } };
+        on = !(isGroup ? (cur.state?.any_on ?? cur.action?.on) : cur.state?.on);
+      } else return res.status(400).json({ error: 'Supported actions: on, off, toggle, status' });
+      const r = await fetch(writePath, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) });
+      return res.json({ ok: r.ok, result: await r.json() });
+    }
+
     if (cfg.type === 'tailscale') {
       if (action !== 'list_devices') return res.status(400).json({ error: 'Only list_devices is supported' });
       const r = await fetch(`https://api.tailscale.com/api/v2/tailnet/${encodeURIComponent(cfg.tailnet)}/devices`, {
@@ -1269,6 +1289,21 @@ app.post('/api/pi-agent/notify/test', async (req, res) => {
     return res.status(502).json({ error: 'Pi Agent unreachable' });
   }
 });
+
+// Admin-only: Philips Hue pairing helpers. The bridge is on the LAN, reachable from
+// the Pi only, so these proxy through to the agent.
+for (const path of ['discover', 'pair', 'targets'] as const) {
+  app.post(`/api/pi-agent/hue/${path}`, async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });
+    if (!hasPiAgent()) return res.status(400).json({ error: 'Pi Agent not configured' });
+    try {
+      const r = await piAgentFetch(`/hue/${path}`, { method: 'POST', body: JSON.stringify(req.body ?? {}) });
+      return res.status(r.status).json(await r.json());
+    } catch {
+      return res.status(502).json({ error: 'Pi Agent unreachable' });
+    }
+  });
+}
 
 app.post('/api/pi-agent/discover', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin access required' });

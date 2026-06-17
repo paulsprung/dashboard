@@ -342,6 +342,7 @@ the dashboard forwards everything sensitive to the Pi and keeps only the metadat
 | Shelly Plug | HTTP | IP address |
 | Shelly Light | HTTP | IP address |
 | Tasmota | HTTP | IP (NOUS A5T, Sonoff, Gosund…) |
+| Philips Hue | HTTP (bridge API v1) | Bridge IP — paired in-app (press link button), then pick a room/light |
 | Wake-on-LAN | UDP | MAC + broadcast address |
 | Proxmox | HTTPS REST | IP, API token (`user@pam!id` + secret) |
 | Docker | HTTP | IP + port (default 2375) |
@@ -357,6 +358,15 @@ the dashboard forwards everything sensitive to the Pi and keeps only the metadat
 3. Detected devices come back with the type pre-filled — click **Add**
 
 Detects Shelly (`_shelly._tcp` + `/shelly`), Tasmota (`_http._tcp` + `/cm`), Docker (port 2375), Proxmox (port 8006).
+
+### Philips Hue
+
+Choose **💡 Philips Hue** as the type. Click **Find** to auto-discover the bridge IP
+(or type it), press the round **link button** on top of the bridge, then click **Pair
+bridge** within 30 seconds. The dashboard fetches your rooms and lights — pick which one
+this card controls (a whole room/zone or a single bulb). The card then shows **On / Off /
+Toggle**. The bridge application key is created via the local API and stored on the Pi
+only; the bridge itself is reached from the Pi over the LAN.
 
 ---
 

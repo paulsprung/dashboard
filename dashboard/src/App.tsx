@@ -34,6 +34,7 @@ type DeviceConfig =
   | { type: 'web'; ip: string; port?: number; scheme?: 'http' | 'https'; path?: string }
   | { type: 'tasmota'; ip: string; channels?: number }
   | { type: 'docker'; ip: string; port?: number }
+  | { type: 'hue'; ip: string; apiKey: string; target?: string }
   | { type: 'tailscale'; apiKey: string; tailnet: string };
 
 type Device = {
@@ -582,6 +583,7 @@ const DEVICE_TYPE_OPTIONS = [
   { value: 'shelly_plug',  label: '🔌 Smart Plug (Shelly)' },
   { value: 'shelly_light', label: '💡 Light (Shelly)' },
   { value: 'tasmota',      label: '🔌 Tasmota device (NOUS, Sonoff…)' },
+  { value: 'hue',          label: '💡 Philips Hue (lights / rooms)' },
   { value: 'wol',          label: '⚡ Wake-on-LAN' },
   { value: 'proxmox',      label: '🖥  Proxmox Server' },
   { value: 'docker',       label: '🐳 Docker Host' },
@@ -594,7 +596,7 @@ const DEVICE_TYPE_OPTIONS = [
 
 const deviceTypeIcon = (type: string) => {
   const map: Record<string, string> = {
-    shelly_plug: '🔌', shelly_light: '💡', tasmota: '🔌',
+    shelly_plug: '🔌', shelly_light: '💡', tasmota: '🔌', hue: '💡',
     wol: '⚡', proxmox: '🖥', docker: '🐳',
     rdp: '🪟', ssh: '🐧', tailscale: '🔒', web: '🌐', http: '🔘',
   };
@@ -634,6 +636,11 @@ function DeviceForm({
   const [dockerPort, setDockerPort] = useState(String((initial?.config as any)?.port ?? ''));
   const [tailscaleApiKey, setTailscaleApiKey] = useState((initial?.config as any)?.apiKey ?? '');
   const [tailscaleTailnet, setTailscaleTailnet] = useState((initial?.config as any)?.tailnet ?? '');
+  const [hueApiKey, setHueApiKey] = useState((initial?.config as any)?.apiKey ?? '');
+  const [hueTarget, setHueTarget] = useState((initial?.config as any)?.target ?? '');
+  const [hueTargets, setHueTargets] = useState<{ id: string; label: string; on: boolean }[]>([]);
+  const [hueStatus, setHueStatus] = useState('');
+  const [hueBusy, setHueBusy] = useState(false);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -668,6 +675,7 @@ function DeviceForm({
         if (c.channels) setTasmotaChannels(String(c.channels));
         if (c.apiKey) setTailscaleApiKey(c.apiKey);
         if (c.tailnet) setTailscaleTailnet(c.tailnet);
+        if (c.type === 'hue') { if (c.apiKey) setHueApiKey(c.apiKey); if (c.target) setHueTarget(c.target); }
       })
       .finally(() => setConfigLoading(false));
   }, [isEdit, initial?.id]);
@@ -683,8 +691,45 @@ function DeviceForm({
     if (type === 'web') return { type, ip, port: port ? Number(port) : undefined, scheme: webScheme === 'https' ? 'https' : 'http', path: webPath || undefined };
     if (type === 'tasmota') return { type, ip, channels: Number(tasmotaChannels) || 1 };
     if (type === 'docker') return { type, ip, port: dockerPort ? Number(dockerPort) : undefined };
+    if (type === 'hue') { if (!ip || !hueApiKey) return null; return { type, ip, apiKey: hueApiKey, target: hueTarget || 'group:0' }; }
     if (type === 'tailscale') { if (!tailscaleApiKey || !tailscaleTailnet) return null; return { type, apiKey: tailscaleApiKey, tailnet: tailscaleTailnet }; }
     return null;
+  };
+
+  const hueCall = async (path: string, body: object) => {
+    const r = await fetch(`/api/pi-agent/hue/${path}`, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return { ok: r.ok, data: await r.json() as any };
+  };
+  const hueDiscover = async () => {
+    setHueBusy(true); setHueStatus('Searching for bridge…');
+    try {
+      const { data } = await hueCall('discover', {});
+      if (data.bridges?.length) { setIp(data.bridges[0].ip); setHueStatus(`✓ Found bridge at ${data.bridges[0].ip}`); }
+      else setHueStatus('No bridge found — enter the IP manually.');
+    } catch { setHueStatus('✗ Discovery failed'); }
+    setHueBusy(false);
+  };
+  const hueLoadTargets = async (key = hueApiKey) => {
+    if (!ip || !key) return;
+    setHueBusy(true);
+    try {
+      const { ok, data } = await hueCall('targets', { ip, apiKey: key });
+      if (ok && data.targets) { setHueTargets(data.targets); if (!hueTarget) setHueTarget('group:0'); setHueStatus(`✓ ${data.targets.length} lights/rooms loaded`); }
+      else setHueStatus(`✗ ${data.error ?? 'Could not list lights'}`);
+    } catch { setHueStatus('✗ Network error'); }
+    setHueBusy(false);
+  };
+  const huePair = async () => {
+    if (!ip) { setHueStatus('Enter the bridge IP first.'); return; }
+    setHueBusy(true); setHueStatus('Pairing…');
+    try {
+      const { ok, data } = await hueCall('pair', { ip });
+      if (ok && data.apiKey) { setHueApiKey(data.apiKey); setHueStatus('✓ Paired — loading lights…'); await hueLoadTargets(data.apiKey); }
+      else setHueStatus(`✗ ${data.error ?? 'Pairing failed'}`);
+    } catch { setHueStatus('✗ Network error'); }
+    setHueBusy(false);
   };
 
   const save = async () => {
@@ -784,6 +829,37 @@ function DeviceForm({
           <Input label="Tailnet" value={tailscaleTailnet} onChange={setTailscaleTailnet} placeholder="deine-organisation.ts.net" t={t} accent={accent} />
         </div>
       )}
+      {type === 'hue' && (
+        <div className="space-y-3">
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input label="Bridge IP" value={ip} onChange={setIp} placeholder="192.168.1.50" t={t} accent={accent} />
+            </div>
+            <Btn accent={accent} variant="secondary" size="sm" onClick={hueDiscover} disabled={hueBusy}>Find</Btn>
+          </div>
+          {!hueApiKey ? (
+            <div className="space-y-2">
+              <p className={`text-xs ${t.muted}`}>Press the round link button on top of your Hue bridge, then click Pair within 30&nbsp;seconds.</p>
+              <Btn accent={accent} size="sm" onClick={huePair} loading={hueBusy} disabled={!ip || hueBusy}>🔗 Pair bridge</Btn>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Select label="Light / Room to control" value={hueTarget} onChange={setHueTarget}
+                    options={hueTargets.length
+                      ? hueTargets.map((tt) => ({ value: tt.id, label: `${tt.on ? '🟡' : '⚪'} ${tt.label}` }))
+                      : [{ value: hueTarget || 'group:0', label: hueTarget && hueTarget !== 'group:0' ? hueTarget : 'All lights' }]}
+                    t={t} accent={accent} />
+                </div>
+                <Btn accent={accent} variant="ghost" size="sm" onClick={() => hueLoadTargets()} disabled={hueBusy}>↻</Btn>
+              </div>
+              <p className={`text-xs ${t.muted}`}>✓ Paired. Pick the room or single light this card switches.</p>
+            </div>
+          )}
+          {hueStatus && <p className={`text-xs ${t.muted}`}>{hueStatus}</p>}
+        </div>
+      )}
 
       <div className="space-y-2">
         <label className={`block text-sm font-medium ${t.muted}`}>Tags (optional)</label>
@@ -818,7 +894,7 @@ function DeviceForm({
 
       <div className="flex gap-2 pt-1">
         <Btn accent={accent} className="flex-1" onClick={save} loading={loading}
-          disabled={!name || (type === 'wol' && !mac) || (type === 'tailscale' && (!tailscaleApiKey || !tailscaleTailnet)) || (!ip && !['wol','tailscale'].includes(type))}>
+          disabled={!name || (type === 'wol' && !mac) || (type === 'tailscale' && (!tailscaleApiKey || !tailscaleTailnet)) || (type === 'hue' && !hueApiKey) || (!ip && !['wol','tailscale'].includes(type))}>
           Save
         </Btn>
         <Btn accent={accent} variant="secondary" onClick={onCancel}>Cancel</Btn>
@@ -2623,6 +2699,13 @@ function DevicesTab({ devices, t, accent, statuses, s, cardSize, user }: { devic
                         {device.canControl !== false && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>}
                         {device.canControl !== false && <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>}
                         <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'energy')}>⚡ Energy</Btn>
+                      </>
+                    )}
+                    {device.type === 'hue' && (
+                      <>
+                        {device.canControl !== false && <Btn accent={accent} size="sm" onClick={() => doAction(device, 'on')}>On</Btn>}
+                        {device.canControl !== false && <Btn accent={accent} variant="secondary" size="sm" onClick={() => doAction(device, 'off')}>Off</Btn>}
+                        {device.canControl !== false && <Btn accent={accent} variant="ghost" size="sm" onClick={() => doAction(device, 'toggle')}>Toggle</Btn>}
                       </>
                     )}
                     {device.canControl === false && (device.type === 'wol' || device.type === 'http') && (

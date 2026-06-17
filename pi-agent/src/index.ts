@@ -11,6 +11,7 @@ import { logEvent, getRecent, type AuditKind } from './audit.js';
 import { accessEnabled, grantAccess, revokeAccess, listGrants, startAccessSweeper } from './access.js';
 import { sendNotification, configuredChannels, notificationsEnabled } from './notify.js';
 import { evaluatePiHealth, evaluateDeviceState, forgetDevice, alertThresholds } from './alerts.js';
+import { discoverBridges, pairBridge, listTargets } from './hue.js';
 
 // Best-effort human-readable target for the audit log (what the Pi will contact)
 const describeTarget = (cfg: DeviceConfig): string => {
@@ -189,6 +190,33 @@ app.post('/notify/test', async (_req, res) => {
   return res.json({ ok: r.ok, channels: r.channels });
 });
 
+// ── Philips Hue pairing helpers ────────────────────────────────────────────────
+// The bridge talks only on the LAN, which the Pi can reach but the dashboard can't.
+
+app.post('/hue/discover', async (_req, res) => {
+  res.json({ bridges: await discoverBridges() });
+});
+
+app.post('/hue/pair', async (req, res) => {
+  const { ip } = req.body as { ip?: string };
+  if (!ip) return res.status(400).json({ error: 'Bridge IP is required' });
+  try {
+    return res.json(await pairBridge(ip));
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'Pairing failed' });
+  }
+});
+
+app.post('/hue/targets', async (req, res) => {
+  const { ip, apiKey } = req.body as { ip?: string; apiKey?: string };
+  if (!ip || !apiKey) return res.status(400).json({ error: 'ip and apiKey are required' });
+  try {
+    return res.json({ targets: await listTargets(ip, apiKey) });
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'Could not list lights' });
+  }
+});
+
 // ── Device config CRUD ────────────────────────────────────────────────────────
 // Dashboard saves sensitive config here. Dashboard itself never persists IPs/tokens.
 
@@ -246,7 +274,7 @@ const getCheckTarget = (cfg: StoredConfig): { host: string; port: number } | nul
   const ip = (cfg as { ip?: string }).ip;
   if (!ip) return null;
   const portMap: Record<string, number> = {
-    shelly_plug: 80, shelly_light: 80, tasmota: 80, http: 80,
+    shelly_plug: 80, shelly_light: 80, tasmota: 80, http: 80, hue: 80,
     proxmox: (cfg as { port?: number }).port ?? 8006,
     rdp: (cfg as { port?: number }).port ?? 3389,
     ssh: (cfg as { port?: number }).port ?? 22,
