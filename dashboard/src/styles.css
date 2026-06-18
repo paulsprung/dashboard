@@ -243,14 +243,15 @@
   transform-origin: 28px 21px;
 }
 /* Keyframe (not transition) so it always plays cleanly from shut → open regardless
-   of the previous state. easeOutBack overshoots slightly past open then settles —
-   a satisfying click, with no backward jerk at the start. */
+   of the previous state. Positive rotation (clockwise in SVG's y-down space) lifts
+   the LEFT leg up and out of the body — i.e. the shackle actually opens. easeOutBack
+   overshoots slightly past open then settles for a satisfying click. */
 .lock-shackle.is-open {
   animation: lockOpen 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 @keyframes lockOpen {
   from { transform: rotate(0deg); }
-  to   { transform: rotate(-42deg); }
+  to   { transform: rotate(40deg); }
 }
 .lock-shackle.is-working {
   animation: lockWiggle 0.8s ease-in-out infinite;
