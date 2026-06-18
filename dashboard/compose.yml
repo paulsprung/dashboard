@@ -1,8 +1,6 @@
 services:
   sm-dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/paulsprung/sm-dashboard:latest
     container_name: sm-dashboard
     restart: unless-stopped
     env_file:
@@ -10,9 +8,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: npm run server:start
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
 
   postgres:
     image: postgres:16-alpine

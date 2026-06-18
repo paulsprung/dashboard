@@ -1,0 +1,68 @@
+# Hardened deployment for a SHARED Hetzner host.
+#
+# Use this instead of compose.yml when the same server also runs other
+# services (website, TeamSpeak, game servers, …). Tailscale runs ONLY inside
+# the sidecar container — the host kernel has no tailscale0 interface, and no
+# other container can reach the tailnet. Only sm-dashboard shares the sidecar's
+# network namespace, so a compromise of any co-located service cannot pivot
+# through Tailscale to the Pi.
+#
+# Pair this with a Tailscale ACL that limits tag:hetzner to the Pi agent port
+# only (see README → "Hardening a shared Hetzner host").
+#
+# Start with:  docker compose -f compose.tailscale-sidecar.yml up -d --build
+
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: sm-tailscale
+    hostname: hetzner-dashboard           # how this node appears in your tailnet
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}          # use a tagged auth key (tag:hetzner)
+      - TS_USERSPACE=true                 # userspace networking — no tun device on the host
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--advertise-tags=tag:hetzner
+    volumes:
+      - ts_state:/var/lib/tailscale
+    ports:
+      - "127.0.0.1:3001:3001"             # dashboard is published through the sidecar's netns
+    restart: unless-stopped
+
+  sm-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sm-dashboard
+    network_mode: "service:tailscale"     # ← shares ONLY the tailscale netns; the single
+                                          #   container on the tailnet. Other containers can't reach it.
+    env_file:
+      - .env
+    depends_on:
+      tailscale:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    command: npm run server:start
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sm-dashboard-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
+  ts_state:

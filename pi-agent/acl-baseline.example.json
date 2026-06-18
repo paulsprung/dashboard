@@ -1,0 +1,38 @@
+{
+  // ── sm-dashboard baseline Tailscale policy (example) ────────────────────────
+  // Copy this to data/acl-baseline.json on the Pi and adapt the identities/tags.
+  // The Pi-Agent applies exactly: THIS file + the currently active time-boxed
+  // grants. It NEVER edits this file. Keep it default-deny: only what you list
+  // here (plus live grants) is reachable.
+  //
+  // Replace:
+  //   admin@example.com  → your Tailscale login (TS_ADMIN_IDENTITY)
+  //   tag:pi / tag:hetzner → tag your Pi and dashboard host in the admin console
+  //   10.0.0.0/24        → your real home subnet (the Pi advertises this route)
+
+  "tagOwners": {
+    "tag:pi":      ["admin@example.com"],
+    "tag:hetzner": ["admin@example.com"]
+  },
+
+  // Auto-approve the Pi's advertised subnet route so you don't click-approve each time.
+  "autoApprovers": {
+    "routes": { "10.0.0.0/24": ["tag:pi"] }
+  },
+
+  "acls": [
+    // Dashboard (Hetzner) ↔ Pi-Agent API only — nothing else between them.
+    { "action": "accept", "src": ["tag:hetzner"], "dst": ["tag:pi:3002"] },
+
+    // Admin may always reach the Pi itself (lockout-safe; keep this rule).
+    { "action": "accept", "src": ["admin@example.com"], "dst": ["tag:pi:*"] }
+
+    // No standing access to LAN devices. The Pi-Agent appends time-boxed
+    // "admin@example.com → <ip>:<port>" rules here only while a grant is active.
+  ],
+
+  // Optional: prove your intended posture stays true even as rules change.
+  "tests": [
+    { "src": "tag:hetzner", "accept": ["tag:pi:3002"], "deny": ["10.0.0.10:8006"] }
+  ]
+}

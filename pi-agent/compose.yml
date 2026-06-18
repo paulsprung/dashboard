@@ -1,0 +1,25 @@
+# Production compose for the Raspberry Pi.
+# The image is built by GitHub Actions and published to GHCR — the Pi never
+# needs the source code, npm, or a TypeScript compiler.
+#
+# First-time setup:
+#   1. Copy this file + .env.example to ~/pi-agent/ on the Pi
+#   2. cp .env.example .env && nano .env  (fill in your values)
+#   3. docker compose pull
+#   4. docker compose up -d
+#
+# To update after a new release:
+#   docker compose pull && docker compose up -d
+
+services:
+  pi-agent:
+    image: ghcr.io/paulsprung/sm-pi-agent:latest
+    container_name: sm-pi-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    network_mode: host        # host network = the real ARP table + mDNS are visible inside
+                              # the container at /proc/net/arp (no bind mount needed — newer
+                              # runc rejects mounting files from /proc anyway)
+    volumes:
+      - ./data:/app/data       # device configs (secrets) + audit log — persisted, BACK THIS UP
